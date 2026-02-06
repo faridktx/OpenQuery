@@ -1,0 +1,30 @@
+{
+  "name": "openquery",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Local-first SQL Copilot",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts",
+    "lint:fix": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts --fix",
+    "format": "prettier --write '**/*.{ts,json,md,yml}'",
+    "format:check": "prettier --check '**/*.{ts,json,md,yml}'",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "eval": "pnpm --filter @openquery/eval run eval",
+    "bench": "pnpm --filter @openquery/eval run bench",
+    "clean": "pnpm -r run clean"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "prettier": "^3.8.1",
+    "typescript": "^5.5.0"
+  }
+}

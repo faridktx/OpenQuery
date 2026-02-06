@@ -1,0 +1,31 @@
+name: desktop-build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  desktop-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build core
+        run: pnpm --filter @openquery/core build
+      - name: Build desktop bridge
+        run: pnpm --filter @openquery/desktop build:bridge
+      - name: Build desktop frontend
+        run: pnpm --filter @openquery/desktop build
+      - name: Compile desktop (no bundle)
+        run: pnpm --filter @openquery/desktop tauri build --no-bundle

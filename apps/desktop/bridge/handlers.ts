@@ -1,0 +1,429 @@
+/**
+ * Bridge handlers — maps RPC method names to core function calls.
+ * Each handler receives params + password (from Tauri keychain) and returns a result.
+ */
+
+import {
+  LocalStore,
+  defaultDbPath,
+  testDbConnection,
+  introspectSchema,
+  askAndMaybeRun,
+  listHistory,
+  getHistoryItem,
+  previewWrite,
+  executeWriteWithAudit,
+  type StoredProfile,
+  type SchemaSnapshot,
+  type GuardrailMode,
+} from '@openquery/core';
+
+let store: LocalStore | null = null;
+
+function getStore(): LocalStore {
+  if (!store) {
+    store = new LocalStore(defaultDbPath());
+    store.migrate();
+  }
+  return store;
+}
+
+function getProfile(nameOrId?: string): StoredProfile {
+  const s = getStore();
+  if (nameOrId) {
+    const byName = s.getProfileByName(nameOrId);
+    if (byName) return byName;
+  }
+  const activeName = s.getActiveProfile();
+  if (!activeName) throw new Error('No active profile set.');
+  const profile = s.getProfileByName(activeName);
+  if (!profile) throw new Error(`Active profile "${activeName}" not found.`);
+  return profile;
+}
+
+// ── Profile handlers ──────────────────────────────────────────────
+
+export function profilesList(): StoredProfile[] {
+  const s = getStore();
+  const all = s.listProfiles();
+  const active = s.getActiveProfile();
+  return all.map((p) => ({ ...p, _active: p.name === active } as StoredProfile & { _active: boolean }));
+}
+
+export function profilesAdd(params: {
+  name: string;
+  db_type: string;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  ssl: boolean;
+}): StoredProfile {
+  const s = getStore();
+  if (s.getProfileByName(params.name)) {
+    throw new Error(`Profile "${params.name}" already exists.`);
+  }
+  const profile = s.createProfile(params);
+  if (!s.getActiveProfile()) {
+    s.setActiveProfile(params.name);
+  }
+  s.logAudit('profile_created', { name: params.name });
+  return profile;
+}
+
+export function profilesRemove(params: { name: string }): { ok: boolean } {
+  const s = getStore();
+  const profile = s.getProfileByName(params.name);
+  if (!profile) throw new Error(`Profile "${params.name}" not found.`);
+  s.deleteProfile(params.name);
+  s.logAudit('profile_removed', { name: params.name });
+  return { ok: true, profileId: profile.id } as { ok: boolean };
+}
+
+export function profilesUse(params: { name: string }): { ok: boolean } {
+  const s = getStore();
+  if (!s.getProfileByName(params.name)) {
+    throw new Error(`Profile "${params.name}" not found.`);
+  }
+  s.setActiveProfile(params.name);
+  return { ok: true };
+}
+
+export async function profilesTest(params: { name?: string; password: string }): Promise<{ ok: boolean; error?: string; serverVersion?: string }> {
+  const profile = getProfile(params.name);
+  return testDbConnection({
+    dbType: profile.db_type,
+    host: profile.host ?? 'localhost',
+    port: profile.port ?? 5432,
+    database: profile.database ?? '',
+    user: profile.user ?? '',
+    password: params.password,
+    ssl: profile.ssl === 1,
+  });
+}
+
+export function profilesGetActive(): { name: string | null } {
+  return { name: getStore().getActiveProfile() };
+}
+
+// ── Schema handlers ───────────────────────────────────────────────
+
+export async function schemaRefresh(params: { name?: string; password: string }): Promise<{ tables: number; columns: number }> {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const snapshot = await introspectSchema(
+    {
+      host: profile.host ?? 'localhost',
+      port: profile.port ?? 5432,
+      database: profile.database ?? '',
+      user: profile.user ?? '',
+      ssl: profile.ssl === 1,
+    },
+    params.password,
+  );
+  const snapshotJson = JSON.stringify(snapshot);
+  s.storeSchemaSnapshot(profile.id, snapshotJson);
+  s.logAudit('schema_refreshed', { profile: profile.name });
+  const totalCols = snapshot.tables.reduce((sum, t) => sum + t.columns.length, 0);
+  return { tables: snapshot.tables.length, columns: totalCols };
+}
+
+export function schemaSearch(params: { name?: string; query: string }): Array<{ schema?: string; table: string; column?: string; dataType?: string }> {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const snap = s.getLatestSchemaSnapshot(profile.id);
+  if (!snap) throw new Error('No schema snapshot. Run schema refresh first.');
+  const schema: SchemaSnapshot = JSON.parse(snap.snapshotJson);
+  const q = params.query.toLowerCase();
+  const results: Array<{ schema?: string; table: string; column?: string; dataType?: string }> = [];
+
+  for (const table of schema.tables) {
+    const tableName = table.schema ? `${table.schema}.${table.name}` : table.name;
+    if (tableName.toLowerCase().includes(q)) {
+      results.push({ schema: table.schema, table: table.name });
+    }
+    for (const col of table.columns) {
+      if (col.name.toLowerCase().includes(q)) {
+        results.push({ schema: table.schema, table: table.name, column: col.name, dataType: col.dataType });
+      }
+    }
+  }
+  return results.slice(0, 50);
+}
+
+export function schemaTableDetail(params: { name?: string; table: string; schema?: string }): unknown {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const snap = s.getLatestSchemaSnapshot(profile.id);
+  if (!snap) throw new Error('No schema snapshot. Run schema refresh first.');
+  const schemaData: SchemaSnapshot = JSON.parse(snap.snapshotJson);
+
+  const found = schemaData.tables.find((t) =>
+    t.name === params.table && (!params.schema || t.schema === params.schema),
+  );
+  if (!found) throw new Error(`Table "${params.table}" not found in schema snapshot.`);
+  return found;
+}
+
+export function schemaGetSnapshot(params: { name?: string }): SchemaSnapshot | null {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const snap = s.getLatestSchemaSnapshot(profile.id);
+  if (!snap) return null;
+  return JSON.parse(snap.snapshotJson);
+}
+
+// ── Ask handlers ──────────────────────────────────────────────────
+
+export async function askDryRun(params: {
+  question: string;
+  mode?: string;
+  password: string;
+  name?: string;
+}): Promise<unknown> {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const mode: GuardrailMode = params.mode === 'standard' ? 'standard' : 'safe';
+  return askAndMaybeRun(
+    {
+      profile: {
+        id: profile.id,
+        name: profile.name,
+        dbType: profile.db_type,
+        host: profile.host ?? 'localhost',
+        port: profile.port ?? 5432,
+        database: profile.database ?? '',
+        user: profile.user ?? '',
+        ssl: profile.ssl === 1,
+      },
+      password: params.password,
+      question: params.question,
+      mode,
+      execute: false,
+      dryRun: true,
+    },
+    s,
+  );
+}
+
+export async function askRun(params: {
+  question: string;
+  mode?: string;
+  password: string;
+  name?: string;
+}): Promise<unknown> {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const mode: GuardrailMode = params.mode === 'standard' ? 'standard' : 'safe';
+  return askAndMaybeRun(
+    {
+      profile: {
+        id: profile.id,
+        name: profile.name,
+        dbType: profile.db_type,
+        host: profile.host ?? 'localhost',
+        port: profile.port ?? 5432,
+        database: profile.database ?? '',
+        user: profile.user ?? '',
+        ssl: profile.ssl === 1,
+      },
+      password: params.password,
+      question: params.question,
+      mode,
+      execute: true,
+      dryRun: false,
+    },
+    s,
+  );
+}
+
+// ── History handlers ──────────────────────────────────────────────
+
+export function historyList(params: { limit?: number }): unknown {
+  const s = getStore();
+  return listHistory(s.getDb(), params.limit ?? 50);
+}
+
+export function historyShow(params: { id: string }): unknown {
+  const s = getStore();
+  const db = s.getDb();
+  let fullId = params.id;
+  if (params.id.length < 36) {
+    const match = db.prepare('SELECT id FROM queries WHERE id LIKE ? LIMIT 1').get(`${params.id}%`) as { id: string } | undefined;
+    if (match) fullId = match.id;
+  }
+  const detail = getHistoryItem(db, fullId);
+  if (!detail) throw new Error(`Query "${params.id}" not found.`);
+  return detail;
+}
+
+export function historyExportMd(params: { id: string }): string {
+  const s = getStore();
+  const db = s.getDb();
+  let fullId = params.id;
+  if (params.id.length < 36) {
+    const match = db.prepare('SELECT id FROM queries WHERE id LIKE ? LIMIT 1').get(`${params.id}%`) as { id: string } | undefined;
+    if (match) fullId = match.id;
+  }
+  const detail = getHistoryItem(db, fullId);
+  if (!detail) throw new Error(`Query "${params.id}" not found.`);
+
+  const lines: string[] = [
+    `# OpenQuery Report`,
+    '',
+    `**Query ID:** ${detail.query.id}`,
+    `**Question:** ${detail.query.question}`,
+    `**Mode:** ${detail.query.mode}`,
+    `**Asked at:** ${detail.query.askedAt}`,
+    '',
+  ];
+
+  if (detail.generation) {
+    lines.push(`## Generated SQL`, '', '```sql', detail.generation.generatedSql, '```', '',
+      `**Model:** ${detail.generation.model}`,
+      `**Confidence:** ${(detail.generation.confidence * 100).toFixed(0)}%`, '');
+  }
+
+  if (detail.run) {
+    lines.push(`## Execution`, '', `**Status:** ${detail.run.status}`);
+    if (detail.run.rewrittenSql) {
+      lines.push('', '**Rewritten SQL:**', '', '```sql', detail.run.rewrittenSql, '```', '');
+    }
+    lines.push(`**Exec time:** ${detail.run.execMs}ms`, `**Row count:** ${detail.run.rowCount}`, '');
+  }
+
+  lines.push('---', '*Result rows are not included in history exports.*');
+  return lines.join('\n');
+}
+
+// ── Power mode handlers ──────────────────────────────────────────
+
+export function profileUpdatePower(params: {
+  name: string;
+  settings: { allowWrite?: boolean; allowDangerous?: boolean; confirmPhrase?: string | null };
+}): { ok: boolean } {
+  const s = getStore();
+  const ok = s.updateProfilePower(params.name, params.settings);
+  if (!ok) throw new Error(`Profile "${params.name}" not found.`);
+  const profile = s.getProfileByName(params.name);
+  if (profile && params.settings.allowWrite !== undefined) {
+    s.logAudit(params.settings.allowWrite ? 'power_enabled' : 'power_disabled', {
+      profile_id: profile.id,
+      allow_dangerous: params.settings.allowDangerous,
+    });
+  }
+  return { ok: true };
+}
+
+export function profileGetPower(params: { name: string }): {
+  allowWrite: boolean;
+  allowDangerous: boolean;
+  confirmPhrase: string | null;
+} {
+  const s = getStore();
+  const settings = s.getProfilePowerSettings(params.name);
+  if (!settings) throw new Error(`Profile "${params.name}" not found.`);
+  return settings;
+}
+
+export async function writePreviewHandler(params: {
+  sql: string;
+  params: unknown[];
+  password: string;
+  name?: string;
+}): Promise<unknown> {
+  const profile = getProfile(params.name);
+  const s = getStore();
+  const powerSettings = s.getProfilePowerSettings(profile.name);
+  return previewWrite({
+    dbType: profile.db_type,
+    host: profile.host ?? 'localhost',
+    port: profile.port ?? 5432,
+    database: profile.database ?? '',
+    user: profile.user ?? '',
+    password: params.password,
+    ssl: profile.ssl === 1,
+    sql: params.sql,
+    params: params.params,
+    customConfirmPhrase: powerSettings?.confirmPhrase,
+  });
+}
+
+export async function writeExecuteHandler(params: {
+  sql: string;
+  params: unknown[];
+  password: string;
+  name?: string;
+}): Promise<unknown> {
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const powerSettings = s.getProfilePowerSettings(profile.name);
+
+  // Generate preview for audit
+  const preview = await previewWrite({
+    dbType: profile.db_type,
+    host: profile.host ?? 'localhost',
+    port: profile.port ?? 5432,
+    database: profile.database ?? '',
+    user: profile.user ?? '',
+    password: params.password,
+    ssl: profile.ssl === 1,
+    sql: params.sql,
+    params: params.params,
+    customConfirmPhrase: powerSettings?.confirmPhrase,
+  });
+
+  return executeWriteWithAudit(
+    {
+      dbType: profile.db_type,
+      host: profile.host ?? 'localhost',
+      port: profile.port ?? 5432,
+      database: profile.database ?? '',
+      user: profile.user ?? '',
+      password: params.password,
+      ssl: profile.ssl === 1,
+      sql: params.sql,
+      params: params.params,
+      profileId: profile.id,
+    },
+    preview,
+    s,
+  );
+}
+
+// ── Method dispatch ──────────────────────────────────────────────
+
+const METHODS: Record<string, (params: any) => unknown | Promise<unknown>> = {
+  'profiles.list': profilesList,
+  'profiles.add': profilesAdd,
+  'profiles.remove': profilesRemove,
+  'profiles.use': profilesUse,
+  'profiles.test': profilesTest,
+  'profiles.getActive': profilesGetActive,
+  'schema.refresh': schemaRefresh,
+  'schema.search': schemaSearch,
+  'schema.tableDetail': schemaTableDetail,
+  'schema.getSnapshot': schemaGetSnapshot,
+  'ask.dryRun': askDryRun,
+  'ask.run': askRun,
+  'history.list': historyList,
+  'history.show': historyShow,
+  'history.exportMd': historyExportMd,
+  'profile.updatePower': profileUpdatePower,
+  'profile.getPower': profileGetPower,
+  'write.preview': writePreviewHandler,
+  'write.execute': writeExecuteHandler,
+};
+
+export async function dispatch(method: string, params: unknown): Promise<unknown> {
+  const handler = METHODS[method];
+  if (!handler) throw new Error(`Unknown method: ${method}`);
+  return handler(params as any);
+}
+
+export function shutdown(): void {
+  if (store) {
+    store.close();
+    store = null;
+  }
+}

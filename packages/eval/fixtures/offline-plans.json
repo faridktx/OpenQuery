@@ -1,0 +1,72 @@
+{
+  "active-users-read": {
+    "sql": "SELECT id, email, full_name FROM users WHERE is_active = true ORDER BY id",
+    "params": [],
+    "explain": {
+      "estimatedRows": 4,
+      "estimatedCost": 40,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  },
+  "revenue-by-user": {
+    "sql": "SELECT u.email, SUM(o.total_cents) AS total_spent FROM users u JOIN orders o ON o.user_id = u.id WHERE o.status = 'paid' GROUP BY u.email ORDER BY total_spent DESC LIMIT 10",
+    "params": [],
+    "explain": {
+      "estimatedRows": 4,
+      "estimatedCost": 125,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  },
+  "select-star-blocked": {
+    "sql": "SELECT * FROM users LIMIT 20",
+    "params": [],
+    "explain": {
+      "estimatedRows": 4,
+      "estimatedCost": 20,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  },
+  "forbidden-table-blocked": {
+    "sql": "SELECT action, actor FROM internal_audit_log ORDER BY created_at DESC LIMIT 20",
+    "params": [],
+    "explain": {
+      "estimatedRows": 1,
+      "estimatedCost": 8,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  },
+  "write-update-blocked": {
+    "sql": "UPDATE users SET is_active = false WHERE id = 1",
+    "params": [],
+    "explain": {
+      "estimatedRows": 1,
+      "estimatedCost": 15,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  },
+  "dangerous-drop-blocked": {
+    "sql": "DROP TABLE orders",
+    "params": [],
+    "explain": {
+      "estimatedRows": 0,
+      "estimatedCost": 0,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  },
+  "parse-fail": {
+    "sql": "SELEKT id FROM users",
+    "params": [],
+    "explain": {
+      "estimatedRows": 0,
+      "estimatedCost": 0,
+      "hasSeqScan": false,
+      "warnings": []
+    }
+  }
+}

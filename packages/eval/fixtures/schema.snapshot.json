@@ -1,0 +1,40 @@
+{
+  "tables": [
+    {
+      "name": "users",
+      "schema": "public",
+      "columns": [
+        { "name": "id", "dataType": "integer", "nullable": false, "isPrimaryKey": true },
+        { "name": "email", "dataType": "text", "nullable": false, "isPrimaryKey": false },
+        { "name": "full_name", "dataType": "text", "nullable": false, "isPrimaryKey": false },
+        { "name": "created_at", "dataType": "timestamp with time zone", "nullable": false, "isPrimaryKey": false },
+        { "name": "is_active", "dataType": "boolean", "nullable": false, "isPrimaryKey": false }
+      ],
+      "rowCountEstimate": 4
+    },
+    {
+      "name": "orders",
+      "schema": "public",
+      "columns": [
+        { "name": "id", "dataType": "integer", "nullable": false, "isPrimaryKey": true },
+        { "name": "user_id", "dataType": "integer", "nullable": false, "isPrimaryKey": false },
+        { "name": "status", "dataType": "text", "nullable": false, "isPrimaryKey": false },
+        { "name": "total_cents", "dataType": "integer", "nullable": false, "isPrimaryKey": false },
+        { "name": "created_at", "dataType": "timestamp with time zone", "nullable": false, "isPrimaryKey": false }
+      ],
+      "rowCountEstimate": 6
+    },
+    {
+      "name": "internal_audit_log",
+      "schema": "public",
+      "columns": [
+        { "name": "id", "dataType": "integer", "nullable": false, "isPrimaryKey": true },
+        { "name": "action", "dataType": "text", "nullable": false, "isPrimaryKey": false },
+        { "name": "actor", "dataType": "text", "nullable": false, "isPrimaryKey": false },
+        { "name": "created_at", "dataType": "timestamp with time zone", "nullable": false, "isPrimaryKey": false }
+      ],
+      "rowCountEstimate": 1
+    }
+  ],
+  "capturedAt": "2026-02-06T00:00:00.000Z"
+}
