@@ -4,8 +4,9 @@ import WorkspacePage from './pages/WorkspacePage';
 import ProfilesPage from './pages/ProfilesPage';
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
+import QuickstartPage from './pages/QuickstartPage';
 
-type Page = 'workspace' | 'profiles' | 'history' | 'settings';
+type Page = 'workspace' | 'setup' | 'profiles' | 'history' | 'settings';
 type ConnectionStatus = 'unknown' | 'ok' | 'error';
 
 interface ProfileSummary {
@@ -31,6 +32,14 @@ const DEFAULT_POLICY: SafePolicySettings = {
 };
 
 const POLICY_STORAGE_KEY = 'openquery.safe-policy.v1';
+const STALE_SCHEMA_MS = 24 * 60 * 60 * 1000;
+
+interface SetupState {
+  needsSetup: boolean;
+  reason: string;
+  schemaCapturedAt: string | null;
+  schemaStale: boolean;
+}
 
 function loadStoredPolicy(): SafePolicySettings {
   try {
@@ -60,10 +69,18 @@ export default function App() {
   const [topError, setTopError] = useState('');
   const [workspaceDraft, setWorkspaceDraft] = useState<WorkspaceDraft | null>(null);
   const [safePolicy, setSafePolicy] = useState<SafePolicySettings>(loadStoredPolicy());
+  const [setupState, setSetupState] = useState<SetupState>({
+    needsSetup: true,
+    reason: 'Complete setup to start running queries.',
+    schemaCapturedAt: null,
+    schemaStale: false,
+  });
+  const [setupChecked, setSetupChecked] = useState(false);
 
   const navItems: Array<{ id: Page; label: string }> = useMemo(
     () => [
       { id: 'workspace', label: 'Workspace' },
+      { id: 'setup', label: 'Setup' },
       { id: 'profiles', label: 'Profiles' },
       { id: 'history', label: 'History' },
       { id: 'settings', label: 'Settings' },
@@ -75,7 +92,62 @@ export default function App() {
     localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(safePolicy));
   }, [safePolicy]);
 
-  const syncProfileState = async (): Promise<void> => {
+  const evaluateSetupState = async (
+    nextProfiles: ProfileSummary[],
+    nextActive: string | null,
+    autoRoute: boolean,
+  ): Promise<void> => {
+    let next: SetupState = {
+      needsSetup: false,
+      reason: '',
+      schemaCapturedAt: null,
+      schemaStale: false,
+    };
+    if (nextProfiles.length === 0) {
+      next = {
+        needsSetup: true,
+        reason: 'No profile yet. Create a connection in Setup to get started.',
+        schemaCapturedAt: null,
+        schemaStale: false,
+      };
+    } else if (!nextActive) {
+      next = {
+        needsSetup: true,
+        reason: 'No active profile selected. Choose one in Setup.',
+        schemaCapturedAt: null,
+        schemaStale: false,
+      };
+    } else {
+      try {
+        const snapshot = await api.schemaGetSnapshot();
+        const hasTables = Array.isArray(snapshot?.tables) && snapshot.tables.length > 0;
+        const capturedAtRaw = typeof snapshot?.capturedAt === 'string' ? snapshot.capturedAt : null;
+        const capturedAtMs = capturedAtRaw ? Date.parse(capturedAtRaw) : Number.NaN;
+        const stale = !Number.isFinite(capturedAtMs) || Date.now() - capturedAtMs > STALE_SCHEMA_MS;
+        next = {
+          needsSetup: !hasTables || stale,
+          reason: !hasTables
+            ? 'Schema snapshot is missing. Refresh schema in Setup.'
+            : 'Schema snapshot is stale. Refresh schema in Setup before running queries.',
+          schemaCapturedAt: capturedAtRaw,
+          schemaStale: stale,
+        };
+      } catch {
+        next = {
+          needsSetup: true,
+          reason: 'Schema snapshot is unavailable. Refresh schema in Setup.',
+          schemaCapturedAt: null,
+          schemaStale: false,
+        };
+      }
+    }
+    setSetupState(next);
+    if (autoRoute && next.needsSetup) {
+      setPage('setup');
+    }
+  };
+
+  const syncProfileState = async (autoRoute: boolean): Promise<void> => {
     try {
       const [allProfiles, active] = await Promise.all([
         api.profilesList(),
@@ -85,14 +157,19 @@ export default function App() {
       setProfiles(normalized);
       setActiveProfile(active.name);
       setConnectionStatus('unknown');
+      await evaluateSetupState(normalized, active.name, autoRoute);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTopError(msg);
+    } finally {
+      if (autoRoute) {
+        setSetupChecked(true);
+      }
     }
   };
 
   useEffect(() => {
-    syncProfileState();
+    void syncProfileState(true);
   }, []);
 
   useEffect(() => {
@@ -118,6 +195,7 @@ export default function App() {
       await api.profilesUse(name);
       setActiveProfile(name);
       setConnectionStatus('unknown');
+      await evaluateSetupState(profiles, name, false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTopError(msg);
@@ -214,6 +292,18 @@ export default function App() {
         </header>
 
         {topError && <div className="inline-error">{topError}</div>}
+        {setupChecked && setupState.needsSetup && (
+          <div className="inline-warning">
+            <strong>Complete setup to start running queries.</strong>
+            <p>{setupState.reason}</p>
+            {setupState.schemaCapturedAt && (
+              <p className="muted">
+                Last schema refresh: {setupState.schemaCapturedAt}
+                {setupState.schemaStale ? ' (stale)' : ''}
+              </p>
+            )}
+          </div>
+        )}
 
         <main className="main-content">
           {page === 'workspace' && (
@@ -224,7 +314,17 @@ export default function App() {
               powerEnabled={powerEnabled}
               draft={workspaceDraft}
               onDraftConsumed={() => setWorkspaceDraft(null)}
-              onNavigateProfiles={() => setPage('profiles')}
+              onNavigateSetup={() => setPage('setup')}
+            />
+          )}
+          {page === 'setup' && (
+            <QuickstartPage
+              password={password}
+              activeProfile={activeProfile}
+              profiles={profiles}
+              setupState={setupState}
+              onReloadProfileState={() => syncProfileState(false)}
+              onNavigate={setPage}
             />
           )}
           {page === 'profiles' && (
@@ -234,6 +334,7 @@ export default function App() {
               onProfilesChanged={(nextProfiles, nextActive) => {
                 setProfiles(nextProfiles);
                 setActiveProfile(nextActive);
+                void evaluateSetupState(nextProfiles, nextActive, false);
               }}
               onConnectionStatusChange={setConnectionStatus}
             />

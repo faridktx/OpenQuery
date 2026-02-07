@@ -9,7 +9,7 @@ interface Props {
   powerEnabled: boolean;
   draft: { question?: string; sql?: string } | null;
   onDraftConsumed: () => void;
-  onNavigateProfiles: () => void;
+  onNavigateSetup: () => void;
 }
 
 interface SqlClassification {
@@ -81,7 +81,7 @@ export default function WorkspacePage({
   powerEnabled,
   draft,
   onDraftConsumed,
-  onNavigateProfiles,
+  onNavigateSetup,
 }: Props) {
   const [schemaSnapshot, setSchemaSnapshot] = useState<any | null>(null);
   const [schemaSearch, setSchemaSearch] = useState('');
@@ -98,6 +98,7 @@ export default function WorkspacePage({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<WorkspaceResult | null>(null);
   const [openAiKeyMissing, setOpenAiKeyMissing] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const [writePreview, setWritePreview] = useState<WritePreviewData | null>(null);
   const [showWriteModal, setShowWriteModal] = useState(false);
@@ -108,6 +109,7 @@ export default function WorkspacePage({
 
   const [page, setPage] = useState(1);
   const pageSize = 25;
+  const examplePrompts = ['Show active users', 'Top spenders', 'Recent paid orders'];
 
   const loadSnapshot = async (): Promise<void> => {
     if (!activeProfile) {
@@ -250,6 +252,8 @@ export default function WorkspacePage({
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('OPENAI_API_KEY')) {
         setOpenAiKeyMissing(true);
+        setError('No OpenAI API key set. You can still run SQL directly, or use dry-run with local fixtures.');
+        return;
       }
       setError(msg);
     } finally {
@@ -370,16 +374,68 @@ export default function WorkspacePage({
     result?.validation?.details?.toLowerCase?.().includes('select *');
   const enforcedLimitWarning =
     result?.validation?.warnings?.some((w: string) => w.toLowerCase().includes('limit'));
+  const hasSchemaTables = Array.isArray(schemaSnapshot?.tables) && schemaSnapshot.tables.length > 0;
 
   if (!activeProfile) {
     return (
       <div className="empty-card">
-        <h2>Select or create a profile</h2>
-        <p>Workspace actions require an active database profile.</p>
-        <button type="button" className="btn" onClick={onNavigateProfiles}>
-          Go to Profiles
+        <h2>No active profile selected</h2>
+        <p>Choose or create a profile in Setup before running any query.</p>
+        <button type="button" className="btn" onClick={onNavigateSetup}>
+          Go to Setup
         </button>
       </div>
+    );
+  }
+
+  if (!hasSchemaTables) {
+    return (
+      <section className="workspace-shell">
+        {error && <div className="inline-error preserve-lines">{error}</div>}
+        {status && <div className="inline-success">{status}</div>}
+        <div className="workspace-toolbar">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowHelp(true)}>
+            Help
+          </button>
+        </div>
+        <div className="empty-card">
+          <h2>Schema snapshot is missing</h2>
+          <p>Refresh schema to enable Ask generation, policy checks, and explain gating.</p>
+          <div className="action-row">
+            <button
+              type="button"
+              className="btn"
+              onClick={handleRefreshSchema}
+              disabled={running || loadingSchema}
+            >
+              {loadingSchema ? 'Refreshing...' : 'Refresh schema'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onNavigateSetup}>
+              Go to Setup
+            </button>
+          </div>
+        </div>
+        {showHelp && (
+          <div className="modal-overlay">
+            <div className="modal-card help-modal">
+              <div className="section-header">
+                <h3>How OpenQuery Works</h3>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowHelp(false)}>
+                  Close
+                </button>
+              </div>
+              <ol className="checklist">
+                <li>Select a profile</li>
+                <li>Refresh schema</li>
+                <li>Ask or paste SQL</li>
+                <li>Guardrails validate and rewrite</li>
+                <li>EXPLAIN gates risk</li>
+                <li>Execute and inspect results</li>
+              </ol>
+            </div>
+          </div>
+        )}
+      </section>
     );
   }
 
@@ -387,6 +443,11 @@ export default function WorkspacePage({
     <section className="workspace-shell">
       {error && <div className="inline-error preserve-lines">{error}</div>}
       {status && <div className="inline-success">{status}</div>}
+      <div className="workspace-toolbar">
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowHelp(true)}>
+          Help
+        </button>
+      </div>
 
       <div className="workspace-grid">
         <aside className="panel schema-panel">
@@ -466,7 +527,7 @@ export default function WorkspacePage({
               {openAiKeyMissing && (
                 <div className="callout">
                   <strong>OpenAI key not set.</strong>
-                  <p>Set <code>OPENAI_API_KEY</code> in your shell, then relaunch desktop.</p>
+                  <p>No OpenAI API key set. You can still run SQL directly, or use dry-run with local fixtures.</p>
                 </div>
               )}
               <textarea
@@ -475,6 +536,21 @@ export default function WorkspacePage({
                 placeholder="Ask: show active users with recent paid orders"
                 onChange={(e) => setQuestion(e.target.value)}
               />
+              <div className="chip-row">
+                {examplePrompts.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    className="chip-btn"
+                    onClick={() => {
+                      setQuestion(chip);
+                      setTab('ask');
+                    }}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
               <div className="action-row">
                 <select value={askMode} onChange={(e) => setAskMode(e.target.value as 'safe' | 'standard')}>
                   <option value="safe">Safe</option>
@@ -487,7 +563,7 @@ export default function WorkspacePage({
                   Dry Run
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={() => runAsk(true)} disabled={running}>
-                  Run
+                  Generate + Run
                 </button>
               </div>
             </div>
@@ -672,6 +748,40 @@ export default function WorkspacePage({
                 Execute
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {showHelp && (
+        <div className="modal-overlay">
+          <div className="modal-card help-modal">
+            <div className="section-header">
+              <h3>Workspace Help</h3>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowHelp(false)}>
+                Close
+              </button>
+            </div>
+            <h4>Mental model</h4>
+            <ol className="checklist">
+              <li>Select profile</li>
+              <li>Refresh schema</li>
+              <li>Ask or paste SQL</li>
+              <li>Guardrails validate and rewrite</li>
+              <li>EXPLAIN gates risk</li>
+              <li>Execute, view results</li>
+            </ol>
+            <h4>Glossary</h4>
+            <ul className="checklist">
+              <li><strong>Safe mode:</strong> strict validation and conservative limits.</li>
+              <li><strong>POWER mode:</strong> write actions with typed confirmation.</li>
+              <li><strong>EXPLAIN gating:</strong> blocks risky plans before execution.</li>
+              <li><strong>SELECT * blocked:</strong> encourages explicit columns and smaller payloads.</li>
+            </ul>
+            <h4>Common fixes</h4>
+            <ul className="checklist">
+              <li>Docker not running: start Docker Desktop, then retest connection.</li>
+              <li>Port in use: run fixture on `OPENQUERY_PG_PORT=55432`.</li>
+              <li>Connection failed: verify host, port, user, password, and SSL settings.</li>
+            </ul>
           </div>
         </div>
       )}
