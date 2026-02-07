@@ -15,7 +15,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run build && pnpm run test:unit",
-    "test:unit": "node --test dist/**/*.test.js",
+    "test:unit": "node --test dist/db/__tests__/*.test.js dist/policy/__tests__/*.test.js",
     "test:integration": "pnpm run build && OPENQUERY_PG_INTEGRATION=1 node --test dist/db/__tests__/postgres.integration.test.js",
     "clean": "rm -rf dist *.tsbuildinfo"
   },

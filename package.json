@@ -9,7 +9,7 @@
     "lint:fix": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts --fix",
     "format": "prettier --write '**/*.{ts,json,md,yml}'",
     "format:check": "prettier --check '**/*.{ts,json,md,yml}'",
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "pnpm --filter @openquery/core run build && pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "eval": "pnpm --filter @openquery/eval run eval",
     "bench": "pnpm --filter @openquery/eval run bench",
