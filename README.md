@@ -55,6 +55,12 @@ pnpm --filter @openquery/desktop tauri build --no-bundle
 - Fallback for power users: set `OPENAI_API_KEY` before launching the app.
 - Without a key, `Ask` is disabled and SQL mode remains available.
 
+## Desktop Setup Modes
+
+- `Demo (No Docker)` (default): in-app SQLite demo, zero terminal steps.
+- `Demo (Docker Postgres)`: start/stop/reset fixture from Setup UI with auto port selection.
+- `Connect my Postgres`: custom host/port/user/password profile flow.
+
 ## Node and pnpm Policy
 
 - Target runtime for parity with CI: Node 20 LTS

@@ -6,7 +6,7 @@
 2. **Rust** toolchain (for Tauri) — install via [rustup](https://rustup.rs/)
 3. **Tauri CLI**: `cargo install tauri-cli` or use `pnpm tauri` from the desktop package
 4. **Postgres** running (use `docker compose up -d` from `infra/docker/`)
-5. OpenAI key configured in Desktop `Settings` -> `AI Provider` (env var fallback optional)
+5. OpenAI key configured in Desktop `Settings` -> `AI Provider` (optional; SQL demo works without it)
 
 ## Setup
 
@@ -35,41 +35,34 @@ This starts the Vite dev server on port 1420 and launches the Tauri window.
 
 ## Manual Test Script
 
-### 1. Profiles
-- Open the **Profiles** tab in the sidebar
-- Click **Add Profile** and fill in your Postgres connection details
-- Check "Remember password" if you want it stored in the OS keychain
-- Click **Create**
-- The profile should appear in the list with an "active" badge
-- Click **Test** — should show "Connection OK"
+### 1. Setup (No Docker default)
+- Open **Setup** in the sidebar (auto-opens when onboarding is needed)
+- Select **Demo (No Docker)** and click **Create demo profile**
+- Click **Refresh schema**
+- Click **Run SQL sample** and confirm rows render
 
-### 2. Schema
-- Open the **Schema** tab
-- Enter your DB password in the sidebar (if not using keychain)
-- Click **Refresh Schema** — should show table/column counts
-- Type a table or column name in the search bar
-- Click a search result to see table details (columns, types, PKs)
+### 2. Setup (Docker optional)
+- Switch to **Demo (Docker Postgres)**
+- Click **Start Docker demo**
+- Confirm status shows running and a resolved host port
+- Click **Refresh schema** and run SQL sample again
 
-### 3. Ask
-- Open the **Ask** tab
-- Type a question like "show me all users"
-- Click **Dry Run** — should show generated SQL, policy result, and EXPLAIN summary without executing
-- Click **Run** — should execute and show results in a data grid
-- Click **Export CSV** to download results
-- Note the Query ID shown at the bottom
+### 3. Ask + SQL
+- If OpenAI key is set: run `Generate (dry-run)` and `Generate + Run (safe)`
+- Without OpenAI key: Ask stays disabled with Settings CTA; SQL tab still runs queries
+- In SQL tab, run `SELECT id, email FROM users LIMIT 20;` then **Explain** and **Run**
 
 ### 4. History
-- Open the **History** tab
-- Your recent queries should appear in the list
-- Click a row to see full details (generation, execution, EXPLAIN)
-- Click **MD** to export a Markdown report
+- Open **History**
+- Confirm setup/sample query entries are visible
+- Open one entry back into Workspace
 
 ## Troubleshooting
 
 - **"Bridge not started"**: Ensure the bridge is built (`pnpm --filter @openquery/desktop build:bridge`) and Node.js is in PATH
-- **"No active profile"**: Add a profile in the Profiles tab first
-- **"No schema snapshot"**: Run Schema Refresh before using Ask
-- **Password errors**: Enter the DB password in the sidebar password field
+- **"No active profile"**: Open Setup and create demo profile
+- **"No schema snapshot"**: Run Setup Step 3 refresh
+- **Docker unavailable**: Use Demo (No Docker), then retry Docker mode later
 - **Tauri build errors**: Ensure Rust toolchain is installed. Run `rustup update` if needed.
 
 ## Architecture Note

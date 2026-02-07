@@ -29,6 +29,11 @@ This is used only to generate a SQL plan.
 4. EXPLAIN gating in safe mode
 5. POWER mode confirmation workflow for writes
 
+Note for Desktop `Demo (No Docker)`:
+
+- SQLite uses `EXPLAIN QUERY PLAN` and simplified risk heuristics.
+- Postgres demo/custom profiles use full Postgres EXPLAIN gating.
+
 ## Local secret handling
 
 - CLI passwords are prompted at runtime and not stored in query history.

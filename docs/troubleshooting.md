@@ -16,6 +16,10 @@ docker info
 OPENQUERY_PG_PORT=55432 pnpm smoke:docker
 ```
 
+Desktop fallback:
+
+- Use `Setup` -> `Demo (No Docker)` to keep working without Docker.
+
 ## Postgres fixture port conflict
 
 Symptom:
@@ -35,6 +39,10 @@ Use a free host port:
 OPENQUERY_PG_PORT=55432 pnpm smoke:docker
 OPENQUERY_PG_PORT=55432 OPENQUERY_PG_HOST=127.0.0.1 pnpm --filter @openquery/core test:integration
 ```
+
+Desktop behavior:
+
+- `Setup` -> `Demo (Docker Postgres)` auto-picks a free port and stores it.
 
 ## Seed data not updating
 

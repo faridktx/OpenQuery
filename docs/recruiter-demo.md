@@ -35,27 +35,32 @@ If port `55432` is busy, pick another free port and reuse it for all fixture com
    - Save profile.
    - Click `Test`.
    - Click `Refresh Schema`.
-2. `Workspace`:
+2. `Setup` (auto-opens on first run):
+   - Select `Demo (No Docker)` and click `Create demo profile`.
+   - Click `Refresh schema`.
+   - In `Run first query`, click `Run SQL sample` (works without OpenAI key).
+   - Optional: open `Settings` and save OpenAI key, then return and run `Generate + Run (safe)`.
+3. `Workspace`:
    - Show `Schema Explorer` on the left.
-   - Click table `public.users` and point out copied column names.
-3. `Ask` tab:
+   - Click table `main.users` (SQLite demo) or `public.users` (Docker Postgres).
+4. `Ask` tab:
    - Ask: `show active users`
    - Click `Generate` (or `Dry Run`).
    - Show generated SQL, Safety panel, Explain panel.
-4. `SQL` tab:
+5. `SQL` tab:
    - Run:
      ```sql
      SELECT id, email, is_active FROM users WHERE is_active = true ORDER BY id LIMIT 20;
      ```
    - Click `Explain`, then `Run`.
    - Show result table, row count, exec time, CSV export button.
-5. Guardrails moment:
+6. Guardrails moment:
    - Try:
      ```sql
      SELECT * FROM users;
      ```
    - In safe mode, show policy warning/rewriting behavior in Safety panel.
-6. POWER mode preview:
+7. POWER mode preview:
    - Go to `Profiles`, enable `POWER mode`.
    - Return to `Workspace` SQL tab and enter:
      ```sql
@@ -69,8 +74,8 @@ If port `55432` is busy, pick another free port and reuse it for all fixture com
 
 If no OpenAI key is configured in Desktop Settings:
 
-- Keep the same flow but use SQL tab instead of Ask generation.
-- The app shows a clear OpenAI key callout and continues working for SQL execution/explain.
+- Keep the same flow with `Run SQL sample` in Setup or SQL tab in Workspace.
+- Ask remains disabled with a Settings CTA; SQL execution/explain still works.
 
 Optional fallback for power users:
 
