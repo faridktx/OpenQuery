@@ -231,7 +231,7 @@ export default function App() {
       <aside className="side-nav">
         <div className="brand-mark">
           <img
-            src="/openquerylogo.png"
+            src="/openquerylogo-rounded.png"
             alt="OpenQuery logo"
             className="brand-mark__logo"
           />

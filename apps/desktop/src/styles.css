@@ -103,10 +103,11 @@ select:focus {
   width: 56px;
   height: 56px;
   border-radius: 12px;
-  object-fit: contain;
+  object-fit: cover;
   background: transparent;
   border: none;
   padding: 0;
+  display: block;
 }
 
 .brand-mark h1 {
