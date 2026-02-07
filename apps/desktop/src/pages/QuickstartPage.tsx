@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as api from '../api';
+import { getOpenAIKey } from '../lib/secretStore';
 
 type NavPage = 'workspace' | 'setup' | 'profiles' | 'history' | 'settings';
 type SetupMode = 'demo' | 'custom';
@@ -94,6 +95,8 @@ export default function QuickstartPage({
   const [prompt, setPrompt] = useState('Show active users by email and name');
   const [askResult, setAskResult] = useState<AskResult | null>(null);
   const [openAiKeyMissing, setOpenAiKeyMissing] = useState(false);
+  const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+  const [checkingOpenAiKey, setCheckingOpenAiKey] = useState(true);
 
   const examplePrompts = useMemo(
     () => ['Show active users', 'Top spenders', 'Recent paid orders'],
@@ -118,6 +121,27 @@ export default function QuickstartPage({
       setSchemaRefreshedAt(setupState.schemaCapturedAt);
     }
   }, [setupState.schemaCapturedAt]);
+
+  useEffect(() => {
+    const refreshOpenAiState = async (): Promise<void> => {
+      setCheckingOpenAiKey(true);
+      try {
+        const [storedKey, settings] = await Promise.all([
+          getOpenAIKey(),
+          api.settingsStatus(),
+        ]);
+        const present = Boolean(storedKey) || Boolean(settings.openAiKeySet);
+        setHasOpenAiKey(present);
+        setOpenAiKeyMissing(!present);
+      } catch {
+        setHasOpenAiKey(false);
+        setOpenAiKeyMissing(true);
+      } finally {
+        setCheckingOpenAiKey(false);
+      }
+    };
+    void refreshOpenAiState();
+  }, []);
 
   const completion = {
     mode: true,
@@ -176,8 +200,9 @@ export default function QuickstartPage({
       await task();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('OPENAI_API_KEY')) {
+      if (msg.includes('OPENAI_API_KEY') || msg.includes('OpenAI API key')) {
         setOpenAiKeyMissing(true);
+        setHasOpenAiKey(false);
         setError('No OpenAI API key set. You can still run SQL directly in Workspace.');
         return;
       }
@@ -232,10 +257,19 @@ export default function QuickstartPage({
         throw new Error('Enter a question first.');
       }
       await ensureProfile();
-      setOpenAiKeyMissing(false);
+      const [storedKey, settings] = await Promise.all([
+        getOpenAIKey(),
+        api.settingsStatus(),
+      ]);
+      const keyPresent = Boolean(storedKey) || Boolean(settings.openAiKeySet);
+      setHasOpenAiKey(keyPresent);
+      setOpenAiKeyMissing(!keyPresent);
+      if (!keyPresent) {
+        throw new Error('No OpenAI API key set. Open Settings and save a key to enable Ask.');
+      }
       const result = execute
-        ? (await api.askRun(prompt, 'safe', resolvedPassword()))
-        : (await api.askDryRun(prompt, 'safe', resolvedPassword()));
+        ? (await api.askRun(prompt, 'safe', resolvedPassword(), storedKey))
+        : (await api.askDryRun(prompt, 'safe', resolvedPassword(), storedKey));
       setAskResult(result as AskResult);
       setStatus(execute ? 'Generated and executed in Safe mode.' : 'Generated in dry-run mode.');
       setStep((prev) => Math.max(prev, 5));
@@ -466,9 +500,15 @@ export default function QuickstartPage({
           {openAiKeyMissing && (
             <div className="callout">
               <strong>No OpenAI API key set.</strong>
-              <p>You can still run SQL directly in Workspace or use dry-run with local fixtures.</p>
+              <p>You can still run SQL directly in Workspace. To enable Ask, save an API key in Settings.</p>
+              <div className="action-row">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => onNavigate('settings')}>
+                  Go to Settings
+                </button>
+              </div>
             </div>
           )}
+          {checkingOpenAiKey && <p className="muted">Checking AI key status...</p>}
           <textarea
             rows={4}
             value={prompt}
@@ -491,7 +531,7 @@ export default function QuickstartPage({
               type="button"
               className="btn btn-secondary"
               onClick={() => void handleRunFirstQuery(false)}
-              disabled={runningAction !== null}
+              disabled={runningAction !== null || !hasOpenAiKey || checkingOpenAiKey}
             >
               {runningAction === 'ask-dry-run' ? 'Generating...' : 'Generate (dry-run)'}
             </button>
@@ -499,7 +539,7 @@ export default function QuickstartPage({
               type="button"
               className="btn"
               onClick={() => void handleRunFirstQuery(true)}
-              disabled={runningAction !== null}
+              disabled={runningAction !== null || !hasOpenAiKey || checkingOpenAiKey}
             >
               {runningAction === 'ask-run' ? 'Running...' : 'Generate + Run (safe)'}
             </button>

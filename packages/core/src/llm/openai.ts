@@ -34,8 +34,9 @@ function getApiKey(): string {
   const key = process.env.OPENAI_API_KEY;
   if (!key) {
     throw new Error(
-      'OPENAI_API_KEY environment variable is not set. ' +
-        'Set it before using the ask command: export OPENAI_API_KEY=sk-...',
+      'OpenAI API key is not configured. ' +
+        'Desktop users: set it in Settings > AI Provider. ' +
+        'CLI users: set OPENAI_API_KEY in your shell.',
     );
   }
   return key;

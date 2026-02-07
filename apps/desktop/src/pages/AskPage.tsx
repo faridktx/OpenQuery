@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import * as api from '../api';
+import { getOpenAIKey } from '../lib/secretStore';
 
 interface Props {
   password: string;
@@ -25,6 +26,7 @@ export default function AskPage({ password }: Props) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
+  const [openAiKeyMissing, setOpenAiKeyMissing] = useState(false);
 
   // Write confirmation modal state
   const [writePreview, setWritePreview] = useState<WritePreviewData | null>(null);
@@ -42,9 +44,18 @@ export default function AskPage({ password }: Props) {
     }
     setError(''); setResult(null); setLoading(true);
     try {
+      const [storedKey, settings] = await Promise.all([
+        getOpenAIKey(),
+        api.settingsStatus(),
+      ]);
+      const keyPresent = Boolean(storedKey) || Boolean(settings.openAiKeySet);
+      setOpenAiKeyMissing(!keyPresent);
+      if (!keyPresent) {
+        throw new Error('No OpenAI API key set. Open Settings to save a key.');
+      }
       const r = execute
-        ? await api.askRun(question, mode, password)
-        : await api.askDryRun(question, mode, password);
+        ? await api.askRun(question, mode, password, storedKey)
+        : await api.askDryRun(question, mode, password, storedKey);
       setResult(r);
 
       // Check if the generated SQL is a write that was blocked due to policy
@@ -139,6 +150,12 @@ export default function AskPage({ password }: Props) {
     <div className="page">
       <h2>Ask</h2>
       {error && <div className="msg error">{error}</div>}
+      {openAiKeyMissing && (
+        <div className="callout">
+          <strong>OpenAI key not set.</strong>
+          <p>Set it in Settings to enable Ask. SQL mode remains available without a key.</p>
+        </div>
+      )}
 
       <div className="ask-input">
         <textarea
@@ -155,10 +172,10 @@ export default function AskPage({ password }: Props) {
             <option value="safe">Safe mode</option>
             <option value="standard">Standard mode</option>
           </select>
-          <button className="btn btn-secondary" onClick={() => handleAsk(false)} disabled={loading}>
+          <button className="btn btn-secondary" onClick={() => handleAsk(false)} disabled={loading || openAiKeyMissing}>
             {loading ? 'Working...' : 'Dry Run'}
           </button>
-          <button className="btn" onClick={() => handleAsk(true)} disabled={loading}>
+          <button className="btn" onClick={() => handleAsk(true)} disabled={loading || openAiKeyMissing}>
             {loading ? 'Working...' : 'Run'}
           </button>
         </div>

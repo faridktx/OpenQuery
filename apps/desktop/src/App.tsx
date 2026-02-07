@@ -319,6 +319,7 @@ export default function App() {
               draft={workspaceDraft}
               onDraftConsumed={() => setWorkspaceDraft(null)}
               onNavigateSetup={() => setPage('setup')}
+              onNavigateSettings={() => setPage('settings')}
             />
           )}
           {page === 'setup' && (

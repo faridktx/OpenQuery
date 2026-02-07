@@ -114,20 +114,38 @@ fn schema_get_snapshot(state: State<'_, AppState>) -> Result<Value, String> {
 // ── Ask commands ────────────────────────────────────────────────
 
 #[tauri::command]
-fn ask_dry_run(state: State<'_, AppState>, question: String, mode: String, password: String) -> Result<Value, String> {
+fn ask_dry_run(
+    state: State<'_, AppState>,
+    question: String,
+    mode: String,
+    password: String,
+    open_ai_api_key: Option<String>,
+) -> Result<Value, String> {
     let mut params = serde_json::Map::new();
     params.insert("question".to_string(), Value::String(question));
     params.insert("mode".to_string(), Value::String(mode));
     params.insert("password".to_string(), Value::String(password));
+    if let Some(key) = open_ai_api_key {
+        params.insert("openAiApiKey".to_string(), Value::String(key));
+    }
     call_bridge_sync(&state, "ask.dryRun", Value::Object(params))
 }
 
 #[tauri::command]
-fn ask_run(state: State<'_, AppState>, question: String, mode: String, password: String) -> Result<Value, String> {
+fn ask_run(
+    state: State<'_, AppState>,
+    question: String,
+    mode: String,
+    password: String,
+    open_ai_api_key: Option<String>,
+) -> Result<Value, String> {
     let mut params = serde_json::Map::new();
     params.insert("question".to_string(), Value::String(question));
     params.insert("mode".to_string(), Value::String(mode));
     params.insert("password".to_string(), Value::String(password));
+    if let Some(key) = open_ai_api_key {
+        params.insert("openAiApiKey".to_string(), Value::String(key));
+    }
     call_bridge_sync(&state, "ask.run", Value::Object(params))
 }
 
@@ -188,6 +206,15 @@ fn history_export_md(state: State<'_, AppState>, id: String) -> Result<String, S
 #[tauri::command]
 fn settings_status(state: State<'_, AppState>) -> Result<Value, String> {
     call_bridge_sync(&state, "settings.status", Value::Object(Default::default()))
+}
+
+#[tauri::command]
+fn settings_test_openai_key(state: State<'_, AppState>, api_key: Option<String>) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    if let Some(key) = api_key {
+        params.insert("apiKey".to_string(), Value::String(key));
+    }
+    call_bridge_sync(&state, "settings.testOpenAiKey", Value::Object(params))
 }
 
 // ── POWER mode commands ─────────────────────────────────────────
@@ -275,6 +302,7 @@ fn main() {
             history_show,
             history_export_md,
             settings_status,
+            settings_test_openai_key,
             profile_update_power,
             profile_get_power,
             write_preview,

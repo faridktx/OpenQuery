@@ -224,6 +224,22 @@ select:focus {
   background: rgba(192, 58, 43, 0.08);
 }
 
+.key-status-not_set {
+  color: var(--ink-muted);
+}
+
+.key-status-valid {
+  color: var(--success);
+  border-color: rgba(29, 125, 70, 0.3);
+  background: rgba(29, 125, 70, 0.08);
+}
+
+.key-status-invalid {
+  color: var(--danger);
+  border-color: rgba(192, 58, 43, 0.3);
+  background: rgba(192, 58, 43, 0.08);
+}
+
 .main-content {
   padding: var(--space-5);
   min-width: 0;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as api from '../api';
 import type { SafePolicySettings } from '../App';
+import { getOpenAIKey } from '../lib/secretStore';
 
 interface Props {
   password: string;
@@ -10,6 +11,7 @@ interface Props {
   draft: { question?: string; sql?: string } | null;
   onDraftConsumed: () => void;
   onNavigateSetup: () => void;
+  onNavigateSettings: () => void;
 }
 
 interface SqlClassification {
@@ -82,6 +84,7 @@ export default function WorkspacePage({
   draft,
   onDraftConsumed,
   onNavigateSetup,
+  onNavigateSettings,
 }: Props) {
   const [schemaSnapshot, setSchemaSnapshot] = useState<any | null>(null);
   const [schemaSearch, setSchemaSearch] = useState('');
@@ -98,6 +101,8 @@ export default function WorkspacePage({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<WorkspaceResult | null>(null);
   const [openAiKeyMissing, setOpenAiKeyMissing] = useState(false);
+  const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+  const [checkingOpenAiKey, setCheckingOpenAiKey] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
 
   const [writePreview, setWritePreview] = useState<WritePreviewData | null>(null);
@@ -149,6 +154,27 @@ export default function WorkspacePage({
     }
     onDraftConsumed();
   }, [draft, onDraftConsumed]);
+
+  useEffect(() => {
+    const refreshOpenAiState = async (): Promise<void> => {
+      setCheckingOpenAiKey(true);
+      try {
+        const [storedKey, settings] = await Promise.all([
+          getOpenAIKey(),
+          api.settingsStatus(),
+        ]);
+        const present = Boolean(storedKey) || Boolean(settings.openAiKeySet);
+        setHasOpenAiKey(present);
+        setOpenAiKeyMissing(!present);
+      } catch {
+        setHasOpenAiKey(false);
+        setOpenAiKeyMissing(true);
+      } finally {
+        setCheckingOpenAiKey(false);
+      }
+    };
+    void refreshOpenAiState();
+  }, []);
 
   const filteredTables = useMemo(() => {
     const tables = schemaSnapshot?.tables ?? [];
@@ -227,11 +253,20 @@ export default function WorkspacePage({
     setRunning(true);
     setError('');
     setStatus('');
-    setOpenAiKeyMissing(false);
+    let storedKey: string | null = null;
     try {
+      storedKey = await getOpenAIKey();
+      const settings = await api.settingsStatus();
+      const keyPresent = Boolean(storedKey) || Boolean(settings.openAiKeySet);
+      setHasOpenAiKey(keyPresent);
+      setOpenAiKeyMissing(!keyPresent);
+      if (!keyPresent) {
+        setError('No OpenAI API key set. Set it in Settings, or use SQL mode directly.');
+        return;
+      }
       const askResult = execute
-        ? await api.askRun(question, askMode, password)
-        : await api.askDryRun(question, askMode, password);
+        ? await api.askRun(question, askMode, password, storedKey)
+        : await api.askDryRun(question, askMode, password, storedKey);
       const classification = classifySqlText(askResult?.plan?.sql ?? '');
       setResult({
         status: askResult.status,
@@ -250,8 +285,9 @@ export default function WorkspacePage({
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('OPENAI_API_KEY')) {
+      if (msg.includes('OPENAI_API_KEY') || msg.includes('OpenAI API key')) {
         setOpenAiKeyMissing(true);
+        setHasOpenAiKey(false);
         setError('No OpenAI API key set. You can still run SQL directly, or use dry-run with local fixtures.');
         return;
       }
@@ -524,12 +560,18 @@ export default function WorkspacePage({
 
           {tab === 'ask' ? (
             <div className="editor-block">
-              {openAiKeyMissing && (
+              {(openAiKeyMissing || !hasOpenAiKey) && !checkingOpenAiKey && (
                 <div className="callout">
                   <strong>OpenAI key not set.</strong>
-                  <p>No OpenAI API key set. You can still run SQL directly, or use dry-run with local fixtures.</p>
+                  <p>Set your key in Settings to enable Ask. SQL mode remains available without a key.</p>
+                  <div className="action-row">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={onNavigateSettings}>
+                      Go to Settings
+                    </button>
+                  </div>
                 </div>
               )}
+              {checkingOpenAiKey && <p className="muted">Checking AI key status...</p>}
               <textarea
                 rows={5}
                 value={question}
@@ -556,13 +598,18 @@ export default function WorkspacePage({
                   <option value="safe">Safe</option>
                   <option value="standard">Standard</option>
                 </select>
-                <button type="button" className="btn btn-secondary" onClick={() => runAsk(false)} disabled={running}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => runAsk(false)}
+                  disabled={running || !hasOpenAiKey || checkingOpenAiKey}
+                >
                   Generate
                 </button>
-                <button type="button" className="btn" onClick={() => runAsk(false)} disabled={running}>
+                <button type="button" className="btn" onClick={() => runAsk(false)} disabled={running || !hasOpenAiKey || checkingOpenAiKey}>
                   Dry Run
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => runAsk(true)} disabled={running}>
+                <button type="button" className="btn btn-secondary" onClick={() => runAsk(true)} disabled={running || !hasOpenAiKey || checkingOpenAiKey}>
                   Generate + Run
                 </button>
               </div>

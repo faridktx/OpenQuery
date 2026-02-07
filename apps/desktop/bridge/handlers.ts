@@ -25,6 +25,8 @@ import {
 } from '@openquery/core';
 
 let store: LocalStore | null = null;
+const launchEnvOpenAiKey = process.env.OPENAI_API_KEY;
+let desktopInjectedOpenAiKey: string | null = null;
 
 function getStore(): LocalStore {
   if (!store) {
@@ -45,6 +47,23 @@ function getProfile(nameOrId?: string): StoredProfile {
   const profile = s.getProfileByName(activeName);
   if (!profile) throw new Error(`Active profile "${activeName}" not found.`);
   return profile;
+}
+
+function applyDesktopOpenAiKey(apiKey?: string): void {
+  const trimmed = typeof apiKey === 'string' ? apiKey.trim() : '';
+  if (trimmed) {
+    process.env.OPENAI_API_KEY = trimmed;
+    desktopInjectedOpenAiKey = trimmed;
+    return;
+  }
+  if (desktopInjectedOpenAiKey !== null) {
+    if (launchEnvOpenAiKey) {
+      process.env.OPENAI_API_KEY = launchEnvOpenAiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
+    desktopInjectedOpenAiKey = null;
+  }
 }
 
 // ── Profile handlers ──────────────────────────────────────────────
@@ -186,10 +205,12 @@ export async function askDryRun(params: {
   mode?: string;
   password: string;
   name?: string;
+  openAiApiKey?: string;
 }): Promise<unknown> {
   const s = getStore();
   const profile = getProfile(params.name);
   const mode: GuardrailMode = params.mode === 'standard' ? 'standard' : 'safe';
+  applyDesktopOpenAiKey(params.openAiApiKey);
   return askAndMaybeRun(
     {
       profile: {
@@ -217,10 +238,12 @@ export async function askRun(params: {
   mode?: string;
   password: string;
   name?: string;
+  openAiApiKey?: string;
 }): Promise<unknown> {
   const s = getStore();
   const profile = getProfile(params.name);
   const mode: GuardrailMode = params.mode === 'standard' ? 'standard' : 'safe';
+  applyDesktopOpenAiKey(params.openAiApiKey);
   return askAndMaybeRun(
     {
       profile: {
@@ -508,6 +531,55 @@ export function settingsStatus(): {
   };
 }
 
+export async function settingsTestOpenAiKey(params: { apiKey?: string }): Promise<{ ok: boolean; message: string }> {
+  const candidate = typeof params.apiKey === 'string' && params.apiKey.trim().length > 0
+    ? params.apiKey.trim()
+    : process.env.OPENAI_API_KEY?.trim();
+
+  if (!candidate) {
+    return {
+      ok: false,
+      message: 'OpenAI API key is not set. Save one in Settings or use OPENAI_API_KEY as fallback.',
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://api.openai.com/v1/models?limit=1', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${candidate}`,
+      },
+      signal: controller.signal,
+    });
+
+    if (response.ok) {
+      return { ok: true, message: 'API key validated successfully.' };
+    }
+    if (response.status === 401) {
+      return { ok: false, message: 'OpenAI rejected this key (401). Check the value and try again.' };
+    }
+    if (response.status === 429) {
+      return { ok: true, message: 'Key accepted, but the account is currently rate or quota limited (429).' };
+    }
+
+    const body = (await response.text()).slice(0, 200);
+    return {
+      ok: false,
+      message: `OpenAI validation failed (${response.status}). ${body || 'No error body returned.'}`,
+    };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { ok: false, message: 'Validation timed out. Check network access and try again.' };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Validation request failed: ${msg}` };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── Power mode handlers ──────────────────────────────────────────
 
 export function profileUpdatePower(params: {
@@ -625,6 +697,7 @@ const METHODS: Record<string, MethodHandler> = {
   'history.show': historyShow,
   'history.exportMd': historyExportMd,
   'settings.status': settingsStatus,
+  'settings.testOpenAiKey': settingsTestOpenAiKey,
   'profile.updatePower': profileUpdatePower,
   'profile.getPower': profileGetPower,
   'write.preview': writePreviewHandler,

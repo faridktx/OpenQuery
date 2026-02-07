@@ -73,12 +73,22 @@ export async function schemaGetSnapshot(): Promise<any> {
 
 // ── Ask ─────────────────────────────────────────────────────────
 
-export async function askDryRun(question: string, mode: string, password: string): Promise<any> {
-  return invoke('ask_dry_run', { question, mode, password });
+export async function askDryRun(
+  question: string,
+  mode: string,
+  password: string,
+  openAiApiKey?: string | null,
+): Promise<any> {
+  return invoke('ask_dry_run', { question, mode, password, openAiApiKey: openAiApiKey ?? null });
 }
 
-export async function askRun(question: string, mode: string, password: string): Promise<any> {
-  return invoke('ask_run', { question, mode, password });
+export async function askRun(
+  question: string,
+  mode: string,
+  password: string,
+  openAiApiKey?: string | null,
+): Promise<any> {
+  return invoke('ask_run', { question, mode, password, openAiApiKey: openAiApiKey ?? null });
 }
 
 // ── Workspace SQL ───────────────────────────────────────────────
@@ -167,4 +177,8 @@ export async function settingsStatus(): Promise<{
   };
 }> {
   return invoke('settings_status');
+}
+
+export async function settingsTestOpenAiKey(apiKey?: string | null): Promise<{ ok: boolean; message: string }> {
+  return invoke('settings_test_openai_key', { apiKey: apiKey ?? null });
 }
