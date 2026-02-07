@@ -1,98 +1,44 @@
-# Recruiter Quick Demo (2 to 3 Minutes)
+# Recruiter Quick Demo (2 Minutes)
 
-This is the canonical demo flow for a fresh clone on macOS.
+This is the single copy-paste flow for a polished desktop demo.
 
-## 0) Preflight
-
-- Start Docker Desktop first.
-- Open terminal in repo root.
-
-If `docker info` fails, start Docker Desktop and retry.
-
-## 1) Copy-paste setup commands
-
+## 1) Launch
 ```bash
 pnpm install
-pnpm -r build
+pnpm --filter @openquery/desktop dev:tauri
+```
+
+## 2) In-app click path
+1. Open `Setup`.
+2. Select `Demo (No Docker)`.
+3. Click `Create demo profile`.
+4. Click `Refresh schema`.
+5. In `Run first query`, click `Run SQL sample`.
+6. Open `Workspace` and run:
+   ```sql
+   SELECT id, email, full_name, is_active FROM users WHERE is_active = 1 ORDER BY id LIMIT 20;
+   ```
+7. Open `History` and reopen the latest query.
+
+## 3) Guardrails moment (safe mode)
+In `Workspace` -> `Run SQL`, run:
+```sql
+SELECT * FROM users;
+```
+Expected: policy block guidance with fix suggestions.
+
+## 4) Optional Docker parity demo
+If you need Postgres parity:
+```bash
+docker info
 OPENQUERY_PG_PORT=55432 pnpm smoke:docker
-pnpm -C apps/cli build
-node apps/cli/dist/main.js doctor
-pnpm --filter @openquery/desktop tauri dev
 ```
+Then in Setup choose `Demo (Docker Postgres)` and click `Start`.
 
-If port `55432` is busy, pick another free port and reuse it for all fixture commands.
+## 5) OpenAI key note
+Primary path is in-app:
+- `Settings` -> `AI Provider` -> save key.
 
-## 2) Desktop click-path (main story)
-
-1. `Profiles`:
-   - Click `Add Profile`.
-   - Use:
-     - name: `demo`
-     - host: `127.0.0.1`
-     - port: `55432`
-     - database: `openquery_test`
-     - user: `openquery`
-   - Save profile.
-   - Click `Test`.
-   - Click `Refresh Schema`.
-2. `Setup` (auto-opens on first run):
-   - Select `Demo (No Docker)` and click `Create demo profile`.
-   - Click `Refresh schema`.
-   - In `Run first query`, click `Run SQL sample` (works without OpenAI key).
-   - Optional: open `Settings` and save OpenAI key, then return and run `Generate + Run (safe)`.
-3. `Workspace`:
-   - Show `Schema Explorer` on the left.
-   - Click table `main.users` (SQLite demo) or `public.users` (Docker Postgres).
-4. `Ask` tab:
-   - Ask: `show active users`
-   - Click `Generate` (or `Dry Run`).
-   - Show generated SQL, Safety panel, Explain panel.
-5. `SQL` tab:
-   - Run:
-     ```sql
-     SELECT id, email, is_active FROM users WHERE is_active = true ORDER BY id LIMIT 20;
-     ```
-   - Click `Explain`, then `Run`.
-   - Show result table, row count, exec time, CSV export button.
-6. Guardrails moment:
-   - Try:
-     ```sql
-     SELECT * FROM users;
-     ```
-   - In safe mode, show policy warning/rewriting behavior in Safety panel.
-7. POWER mode preview:
-   - Go to `Profiles`, enable `POWER mode`.
-   - Return to `Workspace` SQL tab and enter:
-     ```sql
-     UPDATE users SET is_active = false WHERE id = 2;
-     ```
-   - Click `Preview Write`.
-   - Show typed confirmation phrase requirement in modal.
-   - Do not click final execute during recruiter demo.
-
-## 3) No OpenAI key fallback
-
-If no OpenAI key is configured in Desktop Settings:
-
-- Keep the same flow with `Run SQL sample` in Setup or SQL tab in Workspace.
-- Ask remains disabled with a Settings CTA; SQL execution/explain still works.
-
-Optional fallback for power users:
-
-```bash
-export OPENAI_API_KEY=sk-...
-```
-
-## 4) CLI fallback path (if UI demo is blocked)
-
-```bash
-pnpm -C apps/cli build
-node apps/cli/dist/main.js doctor
-node apps/cli/dist/main.js --help
-```
-
-Optional helper:
-
-```bash
-pnpm openquery:build -- doctor
-```
+Without key:
+- Ask remains disabled.
+- SQL mode still works.

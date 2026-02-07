@@ -1,79 +1,139 @@
-# OpenQuery
+<div align="center">
+  <img src="assets/logo/openquery-lockup.svg" alt="OpenQuery" width="640" />
 
-OpenQuery is a local-first SQL copilot for PostgreSQL with policy guardrails.
+  <p><strong>Local-first SQL copilot for teams that need speed with guardrails.</strong></p>
 
-## What Is OpenQuery
+  <p>
+    <a href="https://github.com/faridktx/OpenQuery/actions/workflows/lint-typecheck.yml"><img src="https://github.com/faridktx/OpenQuery/actions/workflows/lint-typecheck.yml/badge.svg" alt="lint-typecheck" /></a>
+    <a href="https://github.com/faridktx/OpenQuery/actions/workflows/unit-tests.yml"><img src="https://github.com/faridktx/OpenQuery/actions/workflows/unit-tests.yml/badge.svg" alt="unit-tests" /></a>
+    <a href="https://github.com/faridktx/OpenQuery/actions/workflows/integration-postgres.yml"><img src="https://github.com/faridktx/OpenQuery/actions/workflows/integration-postgres.yml/badge.svg" alt="integration-postgres" /></a>
+    <a href="https://github.com/faridktx/OpenQuery/actions/workflows/desktop-build.yml"><img src="https://github.com/faridktx/OpenQuery/actions/workflows/desktop-build.yml/badge.svg" alt="desktop-build" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/faridktx/OpenQuery" alt="license" /></a>
+  </p>
 
-- Natural-language to SQL flow with explicit safety checks before execution
-- Local-first state: profiles, schema snapshots, history, and audit log stay on-device
-- Dual surface: CLI plus Tauri desktop app backed by the same core engine
+  <p>
+    <a href="docs/README.md">Docs</a> ·
+    <a href="docs/recruiter-demo.md">2-Minute Demo</a> ·
+    <a href="docs/security.md">Security</a> ·
+    <a href="CONTRIBUTING.md">Contributing</a>
+  </p>
+</div>
 
-## How It Is Different
+## What Is OpenQuery?
+OpenQuery is a desktop + CLI SQL copilot for safe database access.
 
-- Guardrails: AST-based SQL classification and rewrite, not regex-only checks
-- Explain gating: safe mode can block high-cost/high-row plans before execution
-- POWER mode: write operations require preview + typed confirmation
-- Eval harness: deterministic offline regression checks for policy and generation outputs
+- Ask in natural language, or run SQL directly.
+- Apply policy guardrails before execution.
+- Keep profiles, schema snapshots, history, and audit data local-first.
 
-## Start Here
+## Why It Exists
+Teams want AI-assisted querying, but do not want unbounded query risk.
 
-- Setup guide: `docs/dev-setup.md`
-- Docker fixture guide: `docs/docker-setup.md`
-- Smoke checklist: `docs/smoke.md`
-- Recruiter quick demo: `docs/recruiter-demo.md`
+- Plain text-to-SQL tools often skip policy and EXPLAIN checks.
+- Analysts need speed, but engineering needs control and auditability.
+- Desktop workflows should work with and without Docker.
 
-## Canonical Health Checks
+## Key Features
+- Desktop app (Tauri) with Setup, Workspace, Profiles, History, and Settings
+- First-run Quickstart (No-Docker SQLite demo or Docker Postgres demo)
+- Guardrails: SQL classification, select-star checks, limit enforcement, blocked-table controls
+- EXPLAIN gating in safe mode
+- POWER mode with write preview + typed confirmation
+- In-app OpenAI key management (env var remains optional fallback)
+- Shared core package used by both desktop and CLI
+- Eval harness and benchmark scripts for regression tracking
 
-Run from repo root:
+## Screenshots
+> Note: screenshots were captured from current app flows; web capture may show bridge guidance when run outside native Tauri.
 
+![Setup](assets/screenshots/setup.png)
+![Workspace](assets/screenshots/workspace.png)
+![Policy Block](assets/screenshots/policy-block.png)
+![Results](assets/screenshots/results.png)
+
+## 2-Minute Quickstart (Desktop)
+### Option A: No-Docker demo (recommended)
 ```bash
 pnpm install
-pnpm -r build
-pnpm -r test
-pnpm lint
-pnpm typecheck
+pnpm --filter @openquery/desktop dev:tauri
 ```
 
-## CLI (Deterministic Local Run)
+Then in the app:
+1. Open `Setup`.
+2. Choose `Demo (No Docker)`.
+3. Click `Create demo profile`.
+4. Click `Refresh schema`.
+5. Run the first query from Setup or Workspace.
 
+### Option B: Docker Postgres demo
+```bash
+docker info
+OPENQUERY_PG_PORT=55432 pnpm smoke:docker
+pnpm --filter @openquery/desktop dev:tauri
+```
+
+Then in `Setup`, choose `Demo (Docker Postgres)` and click `Start`.
+
+Full recruiter flow: `docs/recruiter-demo.md`
+
+## Quickstart (CLI)
 ```bash
 pnpm -C apps/cli build
 node apps/cli/dist/main.js --help
 node apps/cli/dist/main.js doctor
 ```
 
-## Desktop Build Check (No Bundle)
+## How It Works
+![Architecture](assets/architecture/openquery-architecture.svg)
 
-```bash
-pnpm --filter @openquery/desktop build
-pnpm --filter @openquery/desktop tauri build --no-bundle
+- `apps/desktop`: Tauri frontend + Rust bridge commands
+- `apps/cli`: terminal interface
+- `packages/core`: policy engine, adapters, ask/run orchestration, local storage
+- `infra/docker`: Postgres fixture and seed data
+
+## Guardrails and Safety Model
+- Safe mode validates and can block risky SQL before execution.
+- EXPLAIN gating adds cost/row-risk checks.
+- POWER mode requires explicit confirmation for writes.
+- Local-first boundary keeps credentials and result rows local.
+
+Details: `docs/security.md`, `docs/threat-model.md`
+
+## Repository Structure
+```text
+OpenQuery/
+├─ apps/
+│  ├─ cli/
+│  └─ desktop/
+├─ packages/
+│  ├─ core/
+│  └─ eval/
+├─ infra/
+│  └─ docker/
+├─ scripts/
+├─ docs/
+└─ assets/
 ```
 
-## OpenAI Key in Desktop
+## Roadmap (Current)
+- Improve desktop onboarding and readability polish
+- Expand policy presets and profile-level defaults
+- Add richer eval datasets for SQL safety regressions
+- Harden CI release workflow for desktop artifacts
 
-- Primary flow: open Desktop `Settings` -> `AI Provider` and save your OpenAI API key.
-- Fallback for power users: set `OPENAI_API_KEY` before launching the app.
-- Without a key, `Ask` is disabled and SQL mode remains available.
+## Contributing
+Start with:
+- `docs/dev-setup.md`
+- `docs/README.md`
+- `CONTRIBUTING.md`
 
-## Desktop Setup Modes
+Core checks:
+```bash
+pnpm -r build
+pnpm -r test
+pnpm lint
+pnpm typecheck
+```
 
-- `Demo (No Docker)` (default): in-app SQLite demo, zero terminal steps.
-- `Demo (Docker Postgres)`: start/stop/reset fixture from Setup UI with auto port selection.
-- `Connect my Postgres`: custom host/port/user/password profile flow.
-
-## Node and pnpm Policy
-
-- Target runtime for parity with CI: Node 20 LTS
-- Local Node 24 may work, but it is not the compatibility target
-- Recommended package manager: pnpm 9.x
-
-## Security Model
-
-- OpenAI prompt boundary includes only question + schema metadata + policy context
-- Query results and credentials are not sent to the LLM
-- Full details: `docs/security.md` and `docs/threat-model.md`
-
-## Evaluation
-
-- Eval harness: `pnpm eval`
-- Benchmarks: `pnpm bench`
+## License
+MIT. See `LICENSE`.
