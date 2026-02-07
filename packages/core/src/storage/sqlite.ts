@@ -272,6 +272,64 @@ export class LocalStore {
     return row?.value ?? null;
   }
 
+  setSetting(key: string, value: string | null): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+      .run(key, value);
+  }
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as
+      | { value: string | null }
+      | undefined;
+    return row?.value ?? null;
+  }
+
+  updateProfileConnection(
+    name: string,
+    profile: {
+      db_type?: string;
+      host?: string | null;
+      port?: number | null;
+      database?: string | null;
+      user?: string | null;
+      ssl?: boolean;
+    },
+  ): boolean {
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    if (profile.db_type !== undefined) {
+      updates.push('db_type = ?');
+      values.push(profile.db_type);
+    }
+    if (profile.host !== undefined) {
+      updates.push('host = ?');
+      values.push(profile.host);
+    }
+    if (profile.port !== undefined) {
+      updates.push('port = ?');
+      values.push(profile.port);
+    }
+    if (profile.database !== undefined) {
+      updates.push('database = ?');
+      values.push(profile.database);
+    }
+    if (profile.user !== undefined) {
+      updates.push('"user" = ?');
+      values.push(profile.user);
+    }
+    if (profile.ssl !== undefined) {
+      updates.push('ssl = ?');
+      values.push(profile.ssl ? 1 : 0);
+    }
+    if (updates.length === 0) return false;
+    values.push(name);
+    const result = this.db
+      .prepare(`UPDATE profiles SET ${updates.join(', ')} WHERE name = ?`)
+      .run(...values);
+    return result.changes > 0;
+  }
+
   // ── Audit events ─────────────────────────────────────────────────
 
   logAudit(type: string, payload?: Record<string, unknown>): void {

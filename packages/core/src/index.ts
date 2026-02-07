@@ -24,8 +24,24 @@ export { SAFE_DEFAULTS } from './db/defaults.js';
 export { isSafeSelect } from './db/sql-check.js';
 
 // Execution layer
-export { executeQuery, explainQuery, testDbConnection, executeWriteQuery, explainWriteQuery } from './db/execute.js';
-export type { ExecuteResult, ExecuteLimits, ExplainOutput, ExecuteRequest, ExplainRequest, TestRequest, WriteResult } from './db/execute.js';
+export {
+  executeQuery,
+  explainQuery,
+  testDbConnection,
+  executeWriteQuery,
+  explainWriteQuery,
+  introspectSchemaForConnection,
+} from './db/execute.js';
+export type {
+  ExecuteResult,
+  ExecuteLimits,
+  ExplainOutput,
+  ExecuteRequest,
+  ExplainRequest,
+  TestRequest,
+  WriteResult,
+  IntrospectRequest,
+} from './db/execute.js';
 
 // Postgres EXPLAIN parser (for testing with fixtures)
 export { parseExplainJson } from './db/adapters/postgres.js';
