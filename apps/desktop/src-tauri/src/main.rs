@@ -131,6 +131,32 @@ fn ask_run(state: State<'_, AppState>, question: String, mode: String, password:
     call_bridge_sync(&state, "ask.run", Value::Object(params))
 }
 
+#[tauri::command]
+fn workspace_sql(
+    state: State<'_, AppState>,
+    sql: String,
+    mode: String,
+    action: Option<String>,
+    policy: Option<Value>,
+    password: String,
+    name: Option<String>,
+) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    params.insert("sql".to_string(), Value::String(sql));
+    params.insert("mode".to_string(), Value::String(mode));
+    params.insert("password".to_string(), Value::String(password));
+    if let Some(a) = action {
+        params.insert("action".to_string(), Value::String(a));
+    }
+    if let Some(p) = policy {
+        params.insert("policy".to_string(), p);
+    }
+    if let Some(n) = name {
+        params.insert("name".to_string(), Value::String(n));
+    }
+    call_bridge_sync(&state, "workspace.sql", Value::Object(params))
+}
+
 // ── History commands ────────────────────────────────────────────
 
 #[tauri::command]
@@ -155,6 +181,66 @@ fn history_export_md(state: State<'_, AppState>, id: String) -> Result<String, S
     params.insert("id".to_string(), Value::String(id));
     let result = call_bridge_sync(&state, "history.exportMd", Value::Object(params))?;
     result.as_str().map(|s| s.to_string()).ok_or("Expected string result".to_string())
+}
+
+// ── Settings commands ───────────────────────────────────────────
+
+#[tauri::command]
+fn settings_status(state: State<'_, AppState>) -> Result<Value, String> {
+    call_bridge_sync(&state, "settings.status", Value::Object(Default::default()))
+}
+
+// ── POWER mode commands ─────────────────────────────────────────
+
+#[tauri::command]
+fn profile_update_power(state: State<'_, AppState>, name: String, settings: Value) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    params.insert("name".to_string(), Value::String(name));
+    params.insert("settings".to_string(), settings);
+    call_bridge_sync(&state, "profile.updatePower", Value::Object(params))
+}
+
+#[tauri::command]
+fn profile_get_power(state: State<'_, AppState>, name: String) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    params.insert("name".to_string(), Value::String(name));
+    call_bridge_sync(&state, "profile.getPower", Value::Object(params))
+}
+
+#[tauri::command]
+fn write_preview(
+    state: State<'_, AppState>,
+    sql: String,
+    params: Value,
+    password: String,
+    name: Option<String>,
+) -> Result<Value, String> {
+    let mut payload = serde_json::Map::new();
+    payload.insert("sql".to_string(), Value::String(sql));
+    payload.insert("params".to_string(), params);
+    payload.insert("password".to_string(), Value::String(password));
+    if let Some(n) = name {
+        payload.insert("name".to_string(), Value::String(n));
+    }
+    call_bridge_sync(&state, "write.preview", Value::Object(payload))
+}
+
+#[tauri::command]
+fn write_execute(
+    state: State<'_, AppState>,
+    sql: String,
+    params: Value,
+    password: String,
+    name: Option<String>,
+) -> Result<Value, String> {
+    let mut payload = serde_json::Map::new();
+    payload.insert("sql".to_string(), Value::String(sql));
+    payload.insert("params".to_string(), params);
+    payload.insert("password".to_string(), Value::String(password));
+    if let Some(n) = name {
+        payload.insert("name".to_string(), Value::String(n));
+    }
+    call_bridge_sync(&state, "write.execute", Value::Object(payload))
 }
 
 // ── Main ────────────────────────────────────────────────────────
@@ -184,9 +270,15 @@ fn main() {
             schema_get_snapshot,
             ask_dry_run,
             ask_run,
+            workspace_sql,
             history_list,
             history_show,
             history_export_md,
+            settings_status,
+            profile_update_power,
+            profile_get_power,
+            write_preview,
+            write_execute,
         ])
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::Destroyed = event {

@@ -13,6 +13,12 @@ import {
   getHistoryItem,
   previewWrite,
   executeWriteWithAudit,
+  executeQuery,
+  explainQuery,
+  SAFE_DEFAULTS,
+  DefaultPolicyEngine,
+  classifyStatement,
+  defaultSafeModeConfig,
   type StoredProfile,
   type SchemaSnapshot,
   type GuardrailMode,
@@ -237,6 +243,187 @@ export async function askRun(params: {
   );
 }
 
+// ── Workspace SQL handlers ─────────────────────────────────────────
+
+export async function workspaceSql(params: {
+  sql: string;
+  mode?: string;
+  action?: string;
+  password: string;
+  name?: string;
+  policy?: {
+    maxRowsThreshold?: number;
+    maxCostThreshold?: number;
+    enforceLimit?: boolean;
+  };
+}): Promise<unknown> {
+  const sql = (params.sql ?? '').trim();
+  if (!sql) throw new Error('SQL cannot be empty.');
+
+  const s = getStore();
+  const profile = getProfile(params.name);
+  const mode: GuardrailMode = params.mode === 'standard' ? 'standard' : 'safe';
+  const action = params.action ?? 'run';
+  const powerSettings = s.getProfilePowerSettings(profile.name);
+
+  const engine = new DefaultPolicyEngine(
+    {
+      mode,
+      allowWrite: powerSettings?.allowWrite ?? false,
+      allowDestructive: powerSettings?.allowDangerous ?? false,
+    },
+    mode === 'standard'
+      ? { requireExplain: false, disallowSelectStar: false, maxJoins: 20, maxLimit: 50_000 }
+      : undefined,
+  );
+
+  if (params.policy) {
+    engine.setSafeModeConfig({
+      maxEstimatedRows: params.policy.maxRowsThreshold,
+      maxEstimatedCost: params.policy.maxCostThreshold,
+      enforceLimit: params.policy.enforceLimit,
+    });
+  }
+
+  const classification = classifyStatement(sql);
+  const validation = engine.validateAndRewrite(sql);
+  const rewrittenSql = validation.rewrittenSql ?? sql;
+
+  const base = {
+    classification,
+    validation,
+    rewrittenSql,
+    explainSummary: null as unknown,
+    explainWarnings: [] as string[],
+    explainBlockers: [] as string[],
+  };
+
+  if (!validation.allowed) {
+    return {
+      ...base,
+      status: 'blocked',
+      error: validation.reason,
+      executionResult: null,
+    };
+  }
+
+  const conn = {
+    dbType: profile.db_type,
+    host: profile.host ?? 'localhost',
+    port: profile.port ?? 5432,
+    database: profile.database ?? '',
+    user: profile.user ?? '',
+    password: params.password,
+    ssl: profile.ssl === 1,
+  };
+
+  const shouldExplain =
+    action === 'explain' || action === 'dry-run' || engine.getSafeModeConfig().requireExplain;
+
+  let explainSummary: unknown = null;
+  let explainWarnings: string[] = [];
+  let explainBlockers: string[] = [];
+
+  if (shouldExplain) {
+    try {
+      const explain = await explainQuery({
+        ...conn,
+        sql: rewrittenSql,
+        limits: { statementTimeoutMs: SAFE_DEFAULTS.statementTimeoutMs },
+      });
+      const explainEval = engine.evaluateExplain(explain);
+      explainSummary = explainEval.summary;
+      explainWarnings = explainEval.warnings;
+      explainBlockers = explainEval.blockers;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ...base,
+        status: 'error',
+        error: `EXPLAIN failed: ${msg}`,
+        executionResult: null,
+      };
+    }
+  }
+
+  if (action === 'explain') {
+    return {
+      ...base,
+      status: 'explained',
+      explainSummary,
+      explainWarnings,
+      explainBlockers,
+      executionResult: null,
+    };
+  }
+
+  if (explainBlockers.length > 0) {
+    return {
+      ...base,
+      status: 'blocked',
+      explainSummary,
+      explainWarnings,
+      explainBlockers,
+      error: explainBlockers.join('; '),
+      executionResult: null,
+    };
+  }
+
+  if (action === 'dry-run') {
+    return {
+      ...base,
+      status: 'dry-run',
+      explainSummary,
+      explainWarnings,
+      explainBlockers,
+      executionResult: null,
+    };
+  }
+
+  if (classification.classification !== 'read') {
+    return {
+      ...base,
+      status: 'requires-power',
+      explainSummary,
+      explainWarnings,
+      explainBlockers,
+      error:
+        'Write SQL requires POWER mode preview + confirmation. Use "Preview Write" before execution.',
+      executionResult: null,
+    };
+  }
+
+  try {
+    const executionResult = await executeQuery({
+      ...conn,
+      sql: rewrittenSql,
+      limits: {
+        maxRows: SAFE_DEFAULTS.maxRows,
+        statementTimeoutMs: SAFE_DEFAULTS.statementTimeoutMs,
+      },
+    });
+    return {
+      ...base,
+      status: 'ok',
+      explainSummary,
+      explainWarnings,
+      explainBlockers,
+      executionResult,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ...base,
+      status: 'error',
+      explainSummary,
+      explainWarnings,
+      explainBlockers,
+      error: msg,
+      executionResult: null,
+    };
+  }
+}
+
 // ── History handlers ──────────────────────────────────────────────
 
 export function historyList(params: { limit?: number }): unknown {
@@ -294,6 +481,31 @@ export function historyExportMd(params: { id: string }): string {
 
   lines.push('---', '*Result rows are not included in history exports.*');
   return lines.join('\n');
+}
+
+// ── Settings handlers ───────────────────────────────────────────────
+
+export function settingsStatus(): {
+  openAiKeySet: boolean;
+  model: string;
+  appVersion: string;
+  defaults: {
+    maxRowsThreshold: number;
+    maxCostThreshold: number;
+    enforceLimit: boolean;
+  };
+} {
+  const safeDefaults = defaultSafeModeConfig();
+  return {
+    openAiKeySet: Boolean(process.env.OPENAI_API_KEY),
+    model: process.env.OPENQUERY_MODEL || 'gpt-4o-mini',
+    appVersion: process.env.npm_package_version || '0.0.1',
+    defaults: {
+      maxRowsThreshold: safeDefaults.maxEstimatedRows,
+      maxCostThreshold: safeDefaults.maxEstimatedCost,
+      enforceLimit: safeDefaults.enforceLimit,
+    },
+  };
 }
 
 // ── Power mode handlers ──────────────────────────────────────────
@@ -393,7 +605,9 @@ export async function writeExecuteHandler(params: {
 
 // ── Method dispatch ──────────────────────────────────────────────
 
-const METHODS: Record<string, (params: any) => unknown | Promise<unknown>> = {
+type MethodHandler = (params: any) => unknown | Promise<unknown>;
+
+const METHODS: Record<string, MethodHandler> = {
   'profiles.list': profilesList,
   'profiles.add': profilesAdd,
   'profiles.remove': profilesRemove,
@@ -406,9 +620,11 @@ const METHODS: Record<string, (params: any) => unknown | Promise<unknown>> = {
   'schema.getSnapshot': schemaGetSnapshot,
   'ask.dryRun': askDryRun,
   'ask.run': askRun,
+  'workspace.sql': workspaceSql,
   'history.list': historyList,
   'history.show': historyShow,
   'history.exportMd': historyExportMd,
+  'settings.status': settingsStatus,
   'profile.updatePower': profileUpdatePower,
   'profile.getPower': profileGetPower,
   'write.preview': writePreviewHandler,

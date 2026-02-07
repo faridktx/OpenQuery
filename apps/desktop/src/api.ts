@@ -81,6 +81,30 @@ export async function askRun(question: string, mode: string, password: string): 
   return invoke('ask_run', { question, mode, password });
 }
 
+// ── Workspace SQL ───────────────────────────────────────────────
+
+export async function workspaceSql(params: {
+  sql: string;
+  mode: 'safe' | 'standard';
+  action: 'run' | 'dry-run' | 'explain';
+  password: string;
+  name?: string;
+  policy?: {
+    maxRowsThreshold: number;
+    maxCostThreshold: number;
+    enforceLimit: boolean;
+  };
+}): Promise<any> {
+  return invoke('workspace_sql', {
+    sql: params.sql,
+    mode: params.mode,
+    action: params.action,
+    password: params.password,
+    name: params.name ?? null,
+    policy: params.policy ?? null,
+  });
+}
+
 // ── Power Mode ──────────────────────────────────────────────────
 
 export async function profileUpdatePower(
@@ -128,4 +152,19 @@ export async function historyShow(id: string): Promise<any> {
 
 export async function historyExportMd(id: string): Promise<string> {
   return invoke('history_export_md', { id });
+}
+
+// ── Settings ────────────────────────────────────────────────────
+
+export async function settingsStatus(): Promise<{
+  openAiKeySet: boolean;
+  model: string;
+  appVersion: string;
+  defaults: {
+    maxRowsThreshold: number;
+    maxCostThreshold: number;
+    enforceLimit: boolean;
+  };
+}> {
+  return invoke('settings_status');
 }
