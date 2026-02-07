@@ -13,6 +13,9 @@
     "test": "pnpm -r run test",
     "eval": "pnpm --filter @openquery/eval run eval",
     "bench": "pnpm --filter @openquery/eval run bench",
+    "oq:build": "pnpm -C apps/cli build && pnpm -C apps/cli run cli",
+    "openquery:build": "pnpm -C apps/cli build && pnpm -C apps/cli run cli",
+    "smoke:docker": "bash scripts/smoke-docker.sh",
     "clean": "pnpm -r run clean"
   },
   "engines": {
