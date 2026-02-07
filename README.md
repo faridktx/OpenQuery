@@ -82,6 +82,8 @@ node apps/cli/dist/main.js --help
 node apps/cli/dist/main.js doctor
 ```
 
+Detailed CLI usage: `docs/cli.md`
+
 ## How It Works
 ![Architecture](assets/architecture/openquery-architecture.svg)
 

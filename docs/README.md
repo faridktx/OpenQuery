@@ -5,6 +5,7 @@
 - [Recruiter quick demo](recruiter-demo.md)
 - [2-minute demo script](demo-script.md)
 - [Desktop smoke checklist](desktop-smoke.md)
+- [CLI guide](cli.md)
 
 ## Demo Modes
 - [No-Docker demo (SQLite)](demo-nodocker.md)
