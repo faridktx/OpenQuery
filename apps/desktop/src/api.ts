@@ -182,3 +182,66 @@ export async function settingsStatus(): Promise<{
 export async function settingsTestOpenAiKey(apiKey?: string | null): Promise<{ ok: boolean; message: string }> {
   return invoke('settings_test_openai_key', { apiKey: apiKey ?? null });
 }
+
+// ── Setup + fixture ─────────────────────────────────────────────
+
+export async function demoNoDockerStatus(): Promise<{
+  ready: boolean;
+  dbPath: string;
+  active: boolean;
+  profileName: string;
+}> {
+  return invoke('demo_no_docker_status');
+}
+
+export async function demoNoDockerPrepare(reset = false): Promise<{
+  ready: boolean;
+  dbPath: string;
+  profileName: string;
+}> {
+  return invoke('demo_no_docker_prepare', { reset });
+}
+
+export async function demoNoDockerReset(): Promise<{
+  ready: boolean;
+  dbPath: string;
+  profileName: string;
+}> {
+  return invoke('demo_no_docker_reset');
+}
+
+export async function fixtureCheckDocker(): Promise<{
+  installed: boolean;
+  daemonRunning: boolean;
+  message?: string;
+}> {
+  return invoke('fixture_check_docker');
+}
+
+export async function fixturePickPort(preferredPorts?: number[]): Promise<{ port: number }> {
+  return invoke('fixture_pick_port', { preferredPorts: preferredPorts ?? null });
+}
+
+export async function fixtureUp(port: number): Promise<{
+  running: boolean;
+  port: number;
+  profileName: string;
+}> {
+  return invoke('fixture_up', { port });
+}
+
+export async function fixtureDown(): Promise<{ ok: boolean }> {
+  return invoke('fixture_down');
+}
+
+export async function fixtureStatus(): Promise<{
+  running: boolean;
+  port?: number;
+  message?: string;
+}> {
+  return invoke('fixture_status');
+}
+
+export async function fixtureLogs(tail = 50): Promise<{ lines: string[] }> {
+  return invoke('fixture_logs', { tail });
+}

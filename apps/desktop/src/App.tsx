@@ -12,6 +12,7 @@ type ConnectionStatus = 'unknown' | 'ok' | 'error';
 interface ProfileSummary {
   id: string;
   name: string;
+  db_type: string;
 }
 
 interface WorkspaceDraft {
@@ -87,6 +88,10 @@ export default function App() {
     ],
     [],
   );
+  const activeProfileType = useMemo(
+    () => profiles.find((profile) => profile.name === activeProfile)?.db_type ?? null,
+    [profiles, activeProfile],
+  );
 
   useEffect(() => {
     localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(safePolicy));
@@ -153,11 +158,15 @@ export default function App() {
         api.profilesList(),
         api.profilesGetActive(),
       ]);
-      const normalized = allProfiles.map((p: any) => ({ id: p.id as string, name: p.name as string }));
-      setProfiles(normalized);
+      const typed = allProfiles.map((p: any) => ({
+        id: p.id as string,
+        name: p.name as string,
+        db_type: (p.db_type as string) || 'postgres',
+      }));
+      setProfiles(typed);
       setActiveProfile(active.name);
       setConnectionStatus('unknown');
-      await evaluateSetupState(normalized, active.name, autoRoute);
+      await evaluateSetupState(typed, active.name, autoRoute);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTopError(msg);
@@ -207,14 +216,16 @@ export default function App() {
       setTopError('No active profile selected.');
       return;
     }
-    if (!password.trim()) {
+    const profileType = profiles.find((p) => p.name === activeProfile)?.db_type ?? 'postgres';
+    const resolvedPassword = profileType === 'sqlite' ? '' : password.trim();
+    if (profileType !== 'sqlite' && !resolvedPassword) {
       setTopError('Enter a session password to test the active profile.');
       return;
     }
     setTopError('');
     setConnectionStatus('unknown');
     try {
-      const result = await api.profilesTest(activeProfile, password);
+      const result = await api.profilesTest(activeProfile, resolvedPassword);
       setConnectionStatus(result.ok ? 'ok' : 'error');
       if (!result.ok) {
         setTopError(result.error || 'Connection test failed.');
@@ -314,6 +325,7 @@ export default function App() {
             <WorkspacePage
               password={password}
               activeProfile={activeProfile}
+              activeProfileType={activeProfileType}
               safePolicy={safePolicy}
               powerEnabled={powerEnabled}
               draft={workspaceDraft}

@@ -3,11 +3,12 @@ import * as api from '../api';
 import { getOpenAIKey } from '../lib/secretStore';
 
 type NavPage = 'workspace' | 'setup' | 'profiles' | 'history' | 'settings';
-type SetupMode = 'demo' | 'custom';
+type SetupMode = 'no-docker' | 'docker' | 'custom';
 
 interface ProfileSummary {
   id: string;
   name: string;
+  db_type?: string;
 }
 
 interface SetupState {
@@ -53,16 +54,6 @@ interface Props {
   onNavigate: (page: NavPage) => void;
 }
 
-const CONNECTION_HELP_RE = /(ECONNREFUSED|could not connect|connect ECONNREFUSED|timeout|ENOTFOUND)/i;
-const DEMO_DEFAULTS = {
-  name: 'demo-local',
-  host: '127.0.0.1',
-  port: '55432',
-  database: 'openquery_test',
-  user: 'openquery',
-  password: 'openquery_dev',
-  ssl: false,
-};
 const CUSTOM_DEFAULTS = {
   name: 'my-postgres',
   host: '127.0.0.1',
@@ -73,6 +64,18 @@ const CUSTOM_DEFAULTS = {
   ssl: false,
 };
 
+const DOCKER_DEFAULTS = {
+  name: 'demo-postgres',
+  host: '127.0.0.1',
+  port: '55432',
+  database: 'openquery_test',
+  user: 'openquery',
+  password: 'openquery_dev',
+  ssl: false,
+};
+
+const SAMPLE_SQL = 'SELECT id, email, full_name FROM users WHERE is_active = 1 ORDER BY id LIMIT 20;';
+
 export default function QuickstartPage({
   password,
   activeProfile,
@@ -82,9 +85,9 @@ export default function QuickstartPage({
   onNavigate,
 }: Props) {
   const [step, setStep] = useState(1);
-  const [mode, setMode] = useState<SetupMode>('demo');
+  const [mode, setMode] = useState<SetupMode>('no-docker');
   const [form, setForm] = useState({
-    ...DEMO_DEFAULTS,
+    ...DOCKER_DEFAULTS,
     saveInKeychain: true,
   });
   const [runningAction, setRunningAction] = useState<string | null>(null);
@@ -97,24 +100,15 @@ export default function QuickstartPage({
   const [openAiKeyMissing, setOpenAiKeyMissing] = useState(false);
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
   const [checkingOpenAiKey, setCheckingOpenAiKey] = useState(true);
+  const [demoNoDocker, setDemoNoDocker] = useState<{ ready: boolean; dbPath: string; active: boolean } | null>(null);
+  const [dockerStatus, setDockerStatus] = useState<{ installed: boolean; daemonRunning: boolean; message?: string } | null>(null);
+  const [dockerRunning, setDockerRunning] = useState(false);
+  const [dockerPort, setDockerPort] = useState<number | null>(null);
 
   const examplePrompts = useMemo(
     () => ['Show active users', 'Top spenders', 'Recent paid orders'],
     [],
   );
-
-  useEffect(() => {
-    if (mode === 'demo') {
-      setForm((prev) => ({ ...prev, ...DEMO_DEFAULTS }));
-      return;
-    }
-    setForm((prev) => ({
-      ...prev,
-      ...CUSTOM_DEFAULTS,
-      name: prev.name === DEMO_DEFAULTS.name ? CUSTOM_DEFAULTS.name : prev.name,
-      password: prev.password === DEMO_DEFAULTS.password ? '' : prev.password,
-    }));
-  }, [mode]);
 
   useEffect(() => {
     if (setupState.schemaCapturedAt) {
@@ -143,6 +137,19 @@ export default function QuickstartPage({
     void refreshOpenAiState();
   }, []);
 
+  useEffect(() => {
+    if (mode === 'docker') {
+      setForm((prev) => ({ ...prev, ...DOCKER_DEFAULTS }));
+      void refreshDockerStatus();
+      return;
+    }
+    if (mode === 'custom') {
+      setForm((prev) => ({ ...prev, ...CUSTOM_DEFAULTS }));
+      return;
+    }
+    void refreshNoDockerStatus();
+  }, [mode]);
+
   const completion = {
     mode: true,
     connection: connectionOk === true,
@@ -152,15 +159,98 @@ export default function QuickstartPage({
 
   const selectedProfile = profiles.find((p) => p.name === form.name);
 
-  const resolvedPassword = (): string => {
+  const runAction = async (action: string, task: () => Promise<void>): Promise<void> => {
+    setRunningAction(action);
+    setError('');
+    setStatus('');
+    try {
+      await task();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('OPENAI_API_KEY') || msg.includes('OpenAI API key')) {
+        setOpenAiKeyMissing(true);
+        setHasOpenAiKey(false);
+        setError('No OpenAI API key set. You can still run SQL directly in Workspace.');
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setRunningAction(null);
+    }
+  };
+
+  const refreshNoDockerStatus = async (): Promise<void> => {
+    try {
+      const statusResult = await api.demoNoDockerStatus();
+      setDemoNoDocker({
+        ready: statusResult.ready,
+        dbPath: statusResult.dbPath,
+        active: statusResult.active,
+      });
+      if (statusResult.ready && activeProfile === statusResult.profileName) {
+        setConnectionOk(true);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    }
+  };
+
+  const refreshDockerStatus = async (): Promise<void> => {
+    try {
+      const [dockerCheck, fixture] = await Promise.all([
+        api.fixtureCheckDocker(),
+        api.fixtureStatus(),
+      ]);
+      setDockerStatus(dockerCheck);
+      setDockerRunning(Boolean(fixture.running));
+      if (typeof fixture.port === 'number') {
+        setDockerPort(fixture.port);
+        setForm((prev) => ({ ...prev, port: String(fixture.port) }));
+      }
+      if (fixture.running) {
+        setConnectionOk(true);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    }
+  };
+
+  const resolvePassword = (): string => {
+    if (mode === 'no-docker') {
+      return '';
+    }
+    if (mode === 'docker') {
+      return 'openquery_dev';
+    }
     const fromForm = form.password.trim();
     if (fromForm) return fromForm;
     const fromSession = password.trim();
     if (fromSession) return fromSession;
-    throw new Error('Enter a database password in Setup Step 2, or fill Session Password in the top bar.');
+    throw new Error('Enter database password in Setup Step 2, or fill Session Password in the top bar.');
   };
 
   const ensureProfile = async (): Promise<{ profileName: string; profileId?: string }> => {
+    if (mode === 'no-docker') {
+      const result = await api.demoNoDockerPrepare(false);
+      await onReloadProfileState();
+      setConnectionOk(true);
+      return { profileName: result.profileName };
+    }
+
+    if (mode === 'docker') {
+      if (!dockerRunning) {
+        throw new Error('Docker demo is not running yet. Start it in Step 2.');
+      }
+      if (activeProfile !== 'demo-postgres') {
+        await api.profilesUse('demo-postgres');
+      }
+      await onReloadProfileState();
+      setConnectionOk(true);
+      return { profileName: 'demo-postgres' };
+    }
+
     const profileName = form.name.trim();
     if (!profileName) {
       throw new Error('Profile name is required.');
@@ -192,34 +282,64 @@ export default function QuickstartPage({
     return { profileName, profileId: typeof created?.id === 'string' ? created.id : undefined };
   };
 
-  const runAction = async (action: string, task: () => Promise<void>): Promise<void> => {
-    setRunningAction(action);
-    setError('');
-    setStatus('');
-    try {
-      await task();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('OPENAI_API_KEY') || msg.includes('OpenAI API key')) {
-        setOpenAiKeyMissing(true);
-        setHasOpenAiKey(false);
-        setError('No OpenAI API key set. You can still run SQL directly in Workspace.');
-        return;
-      }
-      if (CONNECTION_HELP_RE.test(msg)) {
-        setError(`${msg}\nNext step: start Docker Desktop, run OPENQUERY_PG_PORT=55432 pnpm smoke:docker, then test again.`);
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setRunningAction(null);
-    }
+  const handlePrepareNoDocker = async (reset: boolean): Promise<void> => {
+    await runAction(reset ? 'prepare-no-docker-reset' : 'prepare-no-docker', async () => {
+      const result = reset ? await api.demoNoDockerReset() : await api.demoNoDockerPrepare(false);
+      await onReloadProfileState();
+      setDemoNoDocker((prev) => ({ ...prev, ready: true, dbPath: result.dbPath, active: true }));
+      setConnectionOk(true);
+      setStatus(reset ? 'No-Docker demo database reset and ready.' : 'No-Docker demo database is ready.');
+      setStep((prev) => Math.max(prev, 3));
+    });
   };
 
-  const handleSaveProfile = async (): Promise<void> => {
-    await runAction('save-profile', async () => {
+  const handleDockerStart = async (): Promise<void> => {
+    await runAction('docker-start', async () => {
+      const check = await api.fixtureCheckDocker();
+      setDockerStatus(check);
+      if (!check.installed || !check.daemonRunning) {
+        throw new Error(check.message || 'Docker is unavailable. Use Demo (No Docker) instead.');
+      }
+      const picked = await api.fixturePickPort([5432, 55432, 55433, 55434]);
+      const started = await api.fixtureUp(picked.port);
+      await onReloadProfileState();
+      setDockerRunning(started.running);
+      setDockerPort(started.port);
+      setForm((prev) => ({ ...prev, ...DOCKER_DEFAULTS, port: String(started.port) }));
+      setConnectionOk(true);
+      setStatus(`Docker demo running on 127.0.0.1:${started.port}.`);
+      setStep((prev) => Math.max(prev, 3));
+    });
+  };
+
+  const handleDockerStop = async (): Promise<void> => {
+    await runAction('docker-stop', async () => {
+      await api.fixtureDown();
+      setDockerRunning(false);
+      setConnectionOk(false);
+      setStatus('Docker demo stopped and volume reset.');
+    });
+  };
+
+  const handleDockerReset = async (): Promise<void> => {
+    await runAction('docker-reset', async () => {
+      await api.fixtureDown();
+      const picked = await api.fixturePickPort([5432, 55432, 55433, 55434]);
+      const started = await api.fixtureUp(picked.port);
+      await onReloadProfileState();
+      setDockerRunning(started.running);
+      setDockerPort(started.port);
+      setConnectionOk(true);
+      setForm((prev) => ({ ...prev, ...DOCKER_DEFAULTS, port: String(started.port) }));
+      setStatus(`Docker demo reset and running on 127.0.0.1:${started.port}.`);
+      setStep((prev) => Math.max(prev, 3));
+    });
+  };
+
+  const handleSaveCustomProfile = async (): Promise<void> => {
+    await runAction('save-custom-profile', async () => {
       const result = await ensureProfile();
-      setStatus(`Profile "${result.profileName}" is ready and active.`);
+      setStatus(`Profile "${result.profileName}" saved and active.`);
       setStep((prev) => Math.max(prev, 2));
     });
   };
@@ -227,22 +347,21 @@ export default function QuickstartPage({
   const handleTestConnection = async (): Promise<void> => {
     await runAction('test-connection', async () => {
       const { profileName } = await ensureProfile();
-      const result = await api.profilesTest(profileName, resolvedPassword());
-      if (result.ok) {
-        setConnectionOk(true);
-        setStatus(`Connection successful: ${result.serverVersion ?? 'database reachable'}.`);
-        setStep((prev) => Math.max(prev, 3));
-        return;
+      const result = await api.profilesTest(profileName, resolvePassword());
+      if (!result.ok) {
+        setConnectionOk(false);
+        throw new Error(result.error || 'Connection failed.');
       }
-      setConnectionOk(false);
-      throw new Error(result.error || 'Connection failed.');
+      setConnectionOk(true);
+      setStatus(`Connection successful: ${result.serverVersion ?? 'database reachable'}.`);
+      setStep((prev) => Math.max(prev, 3));
     });
   };
 
   const handleRefreshSchema = async (): Promise<void> => {
     await runAction('refresh-schema', async () => {
       const { profileName } = await ensureProfile();
-      await api.schemaRefresh(resolvedPassword(), profileName);
+      await api.schemaRefresh(resolvePassword(), profileName);
       const snapshot = await api.schemaGetSnapshot();
       const capturedAt = typeof snapshot?.capturedAt === 'string' ? snapshot.capturedAt : new Date().toISOString();
       setSchemaRefreshedAt(capturedAt);
@@ -251,12 +370,35 @@ export default function QuickstartPage({
     });
   };
 
+  const handleRunSqlSample = async (): Promise<void> => {
+    await runAction('run-sql-sample', async () => {
+      const { profileName } = await ensureProfile();
+      const sqlResult = await api.workspaceSql({
+        sql: SAMPLE_SQL,
+        mode: 'safe',
+        action: 'run',
+        password: resolvePassword(),
+        name: profileName,
+      });
+      setAskResult({
+        status: sqlResult.status,
+        plan: { sql: sqlResult.rewrittenSql ?? SAMPLE_SQL },
+        validation: sqlResult.validation,
+        explainSummary: sqlResult.explainSummary,
+        executionResult: sqlResult.executionResult ?? null,
+        error: sqlResult.error,
+      });
+      setStatus('Sample SQL executed in Safe mode.');
+      setStep((prev) => Math.max(prev, 5));
+    });
+  };
+
   const handleRunFirstQuery = async (execute: boolean): Promise<void> => {
     await runAction(execute ? 'ask-run' : 'ask-dry-run', async () => {
       if (!prompt.trim()) {
         throw new Error('Enter a question first.');
       }
-      await ensureProfile();
+      const { profileName } = await ensureProfile();
       const [storedKey, settings] = await Promise.all([
         getOpenAIKey(),
         api.settingsStatus(),
@@ -268,11 +410,14 @@ export default function QuickstartPage({
         throw new Error('No OpenAI API key set. Open Settings and save a key to enable Ask.');
       }
       const result = execute
-        ? (await api.askRun(prompt, 'safe', resolvedPassword(), storedKey))
-        : (await api.askDryRun(prompt, 'safe', resolvedPassword(), storedKey));
+        ? (await api.askRun(prompt, 'safe', resolvePassword(), storedKey))
+        : (await api.askDryRun(prompt, 'safe', resolvePassword(), storedKey));
       setAskResult(result as AskResult);
       setStatus(execute ? 'Generated and executed in Safe mode.' : 'Generated in dry-run mode.');
       setStep((prev) => Math.max(prev, 5));
+      if (profileName) {
+        await onReloadProfileState();
+      }
     });
   };
 
@@ -283,7 +428,7 @@ export default function QuickstartPage({
     <section className="page-stack">
       <header className="page-header">
         <h2>Quickstart Setup</h2>
-        <p>Complete this once and you can run guarded SQL in under two minutes.</p>
+        <p>Finish onboarding from the app. No terminal required.</p>
       </header>
 
       {setupState.needsSetup && <div className="inline-warning preserve-lines">{setupState.reason}</div>}
@@ -316,15 +461,23 @@ export default function QuickstartPage({
       {step === 1 && (
         <div className="card quickstart-panel">
           <h3>Step 1: Choose setup mode</h3>
-          <p className="muted">Pick the path you want now. You can switch at any time.</p>
+          <p className="muted">Pick one mode now. You can switch any time from Setup.</p>
           <div className="quickstart-mode-grid">
             <button
               type="button"
-              className={mode === 'demo' ? 'select-card active' : 'select-card'}
-              onClick={() => setMode('demo')}
+              className={mode === 'no-docker' ? 'select-card active' : 'select-card'}
+              onClick={() => setMode('no-docker')}
             >
-              <strong>Use demo database (recommended)</strong>
-              <span>Fastest path for demos. Uses local Docker fixture with seeded data.</span>
+              <strong>Demo (No Docker) - recommended</strong>
+              <span>Built-in SQLite demo. Works immediately, even if Docker is missing.</span>
+            </button>
+            <button
+              type="button"
+              className={mode === 'docker' ? 'select-card active' : 'select-card'}
+              onClick={() => setMode('docker')}
+            >
+              <strong>Demo (Docker Postgres)</strong>
+              <span>Closer to production behavior with Postgres and EXPLAIN parity.</span>
             </button>
             <button
               type="button"
@@ -332,7 +485,7 @@ export default function QuickstartPage({
               onClick={() => setMode('custom')}
             >
               <strong>Connect my Postgres</strong>
-              <span>Use an existing Postgres host, credentials, and SSL choice.</span>
+              <span>Use your own host, credentials, and SSL settings.</span>
             </button>
           </div>
           <div className="action-row">
@@ -346,103 +499,165 @@ export default function QuickstartPage({
       {step === 2 && (
         <div className="card quickstart-panel">
           <h3>Step 2: Connection details</h3>
-          {mode === 'demo' && (
-            <div className="callout">
-              <strong>Demo DB commands</strong>
-              <p><code>docker info</code></p>
-              <p><code>OPENQUERY_PG_PORT=55432 pnpm smoke:docker</code></p>
-              <p className="muted">Run these in your terminal, then click Test connection.</p>
-            </div>
+
+          {mode === 'no-docker' && (
+            <>
+              <div className="callout">
+                <strong>Local demo DB</strong>
+                <p>SQLite demo runs locally and does not require Docker.</p>
+                <p className="muted">Path: {demoNoDocker?.dbPath ?? 'Preparing...'}</p>
+              </div>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void handlePrepareNoDocker(false)}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'prepare-no-docker' ? 'Preparing...' : 'Create demo profile'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handlePrepareNoDocker(true)}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'prepare-no-docker-reset' ? 'Resetting...' : 'Reset demo DB'}
+                </button>
+                {connectionOk && <span className="badge">Ready</span>}
+              </div>
+            </>
           )}
 
-          <div className="form-grid quickstart-form-grid">
-            <label>
-              <span>Profile name</span>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              />
-            </label>
-            <label>
-              <span>Host</span>
-              <input
-                type="text"
-                value={form.host}
-                onChange={(e) => setForm((prev) => ({ ...prev, host: e.target.value }))}
-              />
-            </label>
-            <label>
-              <span>Port</span>
-              <input
-                type="number"
-                value={form.port}
-                onChange={(e) => setForm((prev) => ({ ...prev, port: e.target.value }))}
-              />
-            </label>
-            <label>
-              <span>Database</span>
-              <input
-                type="text"
-                value={form.database}
-                onChange={(e) => setForm((prev) => ({ ...prev, database: e.target.value }))}
-              />
-            </label>
-            <label>
-              <span>User</span>
-              <input
-                type="text"
-                value={form.user}
-                onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
-              />
-            </label>
-            <label>
-              <span>Password</span>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                placeholder="Required for testing and schema refresh"
-              />
-            </label>
-            <label className="toggle-row compact">
-              <input
-                type="checkbox"
-                checked={form.ssl}
-                onChange={(e) => setForm((prev) => ({ ...prev, ssl: e.target.checked }))}
-              />
-              <span>Use SSL</span>
-            </label>
-            <label className="toggle-row compact">
-              <input
-                type="checkbox"
-                checked={form.saveInKeychain}
-                onChange={(e) => setForm((prev) => ({ ...prev, saveInKeychain: e.target.checked }))}
-              />
-              <span>Save password in keychain</span>
-            </label>
-          </div>
+          {mode === 'docker' && (
+            <>
+              <div className="callout">
+                <strong>Docker Postgres fixture</strong>
+                <p>{dockerStatus?.message ?? 'Use Start to launch demo Postgres from the app.'}</p>
+                <p className="muted">
+                  Status: {dockerRunning ? `running on port ${dockerPort ?? 'unknown'}` : 'not running'}
+                </p>
+              </div>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void handleDockerStart()}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'docker-start' ? 'Starting...' : 'Start Docker demo'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleDockerStop()}
+                  disabled={runningAction !== null || !dockerRunning}
+                >
+                  {runningAction === 'docker-stop' ? 'Stopping...' : 'Stop'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleDockerReset()}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'docker-reset' ? 'Resetting...' : 'Reset'}
+                </button>
+              </div>
+            </>
+          )}
 
-          <div className="action-row">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleSaveProfile}
-              disabled={runningAction !== null}
-            >
-              {runningAction === 'save-profile' ? 'Saving...' : 'Save profile'}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={handleTestConnection}
-              disabled={runningAction !== null}
-            >
-              {runningAction === 'test-connection' ? 'Testing...' : 'Test connection'}
-            </button>
-            {connectionOk === true && <span className="badge">Connected</span>}
-            {connectionOk === false && <span className="badge badge-danger">Connection failed</span>}
-          </div>
+          {mode === 'custom' && (
+            <>
+              <div className="form-grid quickstart-form-grid">
+                <label>
+                  <span>Profile name</span>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Host</span>
+                  <input
+                    type="text"
+                    value={form.host}
+                    onChange={(e) => setForm((prev) => ({ ...prev, host: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Port</span>
+                  <input
+                    type="number"
+                    value={form.port}
+                    onChange={(e) => setForm((prev) => ({ ...prev, port: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Database</span>
+                  <input
+                    type="text"
+                    value={form.database}
+                    onChange={(e) => setForm((prev) => ({ ...prev, database: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>User</span>
+                  <input
+                    type="text"
+                    value={form.user}
+                    onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder="Required for test and schema refresh"
+                  />
+                </label>
+                <label className="toggle-row compact">
+                  <input
+                    type="checkbox"
+                    checked={form.ssl}
+                    onChange={(e) => setForm((prev) => ({ ...prev, ssl: e.target.checked }))}
+                  />
+                  <span>Use SSL</span>
+                </label>
+                <label className="toggle-row compact">
+                  <input
+                    type="checkbox"
+                    checked={form.saveInKeychain}
+                    onChange={(e) => setForm((prev) => ({ ...prev, saveInKeychain: e.target.checked }))}
+                  />
+                  <span>Save password in keychain</span>
+                </label>
+              </div>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleSaveCustomProfile()}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'save-custom-profile' ? 'Saving...' : 'Save profile'}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void handleTestConnection()}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'test-connection' ? 'Testing...' : 'Test connection'}
+                </button>
+                {connectionOk === true && <span className="badge">Connected</span>}
+                {connectionOk === false && <span className="badge badge-danger">Connection failed</span>}
+              </div>
+            </>
+          )}
 
           <div className="action-row">
             <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>
@@ -463,12 +678,15 @@ export default function QuickstartPage({
       {step === 3 && (
         <div className="card quickstart-panel">
           <h3>Step 3: Refresh schema</h3>
-          <p className="muted">This powers SQL generation, policy checks, and EXPLAIN gating.</p>
+          <p className="muted">
+            Refresh powers schema explorer, guardrails, and Ask generation.
+            {mode === 'no-docker' && ' SQLite demo mode uses simplified EXPLAIN output.'}
+          </p>
           <div className="action-row">
             <button
               type="button"
               className="btn"
-              onClick={handleRefreshSchema}
+              onClick={() => void handleRefreshSchema()}
               disabled={runningAction !== null}
             >
               {runningAction === 'refresh-schema' ? 'Refreshing...' : 'Refresh schema'}
@@ -496,11 +714,11 @@ export default function QuickstartPage({
       {step === 4 && (
         <div className="card quickstart-panel">
           <h3>Step 4: Run first query</h3>
-          <p className="muted">Try a safe read query with policy and explain checks.</p>
+          <p className="muted">Run Ask with OpenAI, or run the SQL sample without OpenAI.</p>
           {openAiKeyMissing && (
             <div className="callout">
               <strong>No OpenAI API key set.</strong>
-              <p>You can still run SQL directly in Workspace. To enable Ask, save an API key in Settings.</p>
+              <p>Ask is disabled until a key is saved. SQL sample still runs now.</p>
               <div className="action-row">
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => onNavigate('settings')}>
                   Go to Settings
@@ -542,6 +760,14 @@ export default function QuickstartPage({
               disabled={runningAction !== null || !hasOpenAiKey || checkingOpenAiKey}
             >
               {runningAction === 'ask-run' ? 'Running...' : 'Generate + Run (safe)'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleRunSqlSample()}
+              disabled={runningAction !== null}
+            >
+              {runningAction === 'run-sql-sample' ? 'Running SQL...' : 'Run SQL sample'}
             </button>
           </div>
 
@@ -614,12 +840,12 @@ export default function QuickstartPage({
       {step === 5 && (
         <div className="card quickstart-panel">
           <h3>Step 5: Done</h3>
-          <p className="muted">Setup is complete. You can now run guided SQL with guardrails.</p>
+          <p className="muted">Setup is complete. You can now run guarded SQL with confidence.</p>
           <ul className="checklist">
             <li>{completion.mode ? 'Done' : 'Pending'}: Setup mode selected</li>
-            <li>{completion.connection ? 'Done' : 'Pending'}: Connection tested</li>
+            <li>{completion.connection ? 'Done' : 'Pending'}: Connection ready</li>
             <li>{completion.schema ? 'Done' : 'Pending'}: Schema refreshed</li>
-            <li>{completion.firstQuery ? 'Done' : 'Pending'}: First query generated</li>
+            <li>{completion.firstQuery ? 'Done' : 'Pending'}: First query executed</li>
           </ul>
           <div className="action-row">
             <button type="button" className="btn" onClick={() => onNavigate('workspace')}>

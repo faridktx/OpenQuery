@@ -217,6 +217,66 @@ fn settings_test_openai_key(state: State<'_, AppState>, api_key: Option<String>)
     call_bridge_sync(&state, "settings.testOpenAiKey", Value::Object(params))
 }
 
+#[tauri::command]
+fn demo_no_docker_status(state: State<'_, AppState>) -> Result<Value, String> {
+    call_bridge_sync(&state, "demo.noDockerStatus", Value::Object(Default::default()))
+}
+
+#[tauri::command]
+fn demo_no_docker_prepare(state: State<'_, AppState>, reset: Option<bool>) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    params.insert("reset".to_string(), Value::Bool(reset.unwrap_or(false)));
+    call_bridge_sync(&state, "demo.noDockerPrepare", Value::Object(params))
+}
+
+#[tauri::command]
+fn demo_no_docker_reset(state: State<'_, AppState>) -> Result<Value, String> {
+    call_bridge_sync(&state, "demo.noDockerReset", Value::Object(Default::default()))
+}
+
+#[tauri::command]
+fn fixture_check_docker(state: State<'_, AppState>) -> Result<Value, String> {
+    call_bridge_sync(&state, "fixture.checkDocker", Value::Object(Default::default()))
+}
+
+#[tauri::command]
+fn fixture_pick_port(state: State<'_, AppState>, preferred_ports: Option<Vec<u16>>) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    if let Some(ports) = preferred_ports {
+        params.insert(
+            "preferredPorts".to_string(),
+            Value::Array(ports.into_iter().map(|p| Value::Number((p as u64).into())).collect()),
+        );
+    }
+    call_bridge_sync(&state, "fixture.pickPort", Value::Object(params))
+}
+
+#[tauri::command]
+fn fixture_up(state: State<'_, AppState>, port: u16) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    params.insert("port".to_string(), Value::Number((port as u64).into()));
+    call_bridge_sync(&state, "fixture.up", Value::Object(params))
+}
+
+#[tauri::command]
+fn fixture_down(state: State<'_, AppState>) -> Result<Value, String> {
+    call_bridge_sync(&state, "fixture.down", Value::Object(Default::default()))
+}
+
+#[tauri::command]
+fn fixture_status(state: State<'_, AppState>) -> Result<Value, String> {
+    call_bridge_sync(&state, "fixture.status", Value::Object(Default::default()))
+}
+
+#[tauri::command]
+fn fixture_logs(state: State<'_, AppState>, tail: Option<u32>) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    if let Some(t) = tail {
+        params.insert("tail".to_string(), Value::Number(t.into()));
+    }
+    call_bridge_sync(&state, "fixture.logs", Value::Object(params))
+}
+
 // ── POWER mode commands ─────────────────────────────────────────
 
 #[tauri::command]
@@ -303,6 +363,15 @@ fn main() {
             history_export_md,
             settings_status,
             settings_test_openai_key,
+            demo_no_docker_status,
+            demo_no_docker_prepare,
+            demo_no_docker_reset,
+            fixture_check_docker,
+            fixture_pick_port,
+            fixture_up,
+            fixture_down,
+            fixture_status,
+            fixture_logs,
             profile_update_power,
             profile_get_power,
             write_preview,

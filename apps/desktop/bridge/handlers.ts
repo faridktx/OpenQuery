@@ -7,7 +7,7 @@ import {
   LocalStore,
   defaultDbPath,
   testDbConnection,
-  introspectSchema,
+  introspectSchemaForConnection,
   askAndMaybeRun,
   listHistory,
   getHistoryItem,
@@ -23,10 +23,70 @@ import {
   type SchemaSnapshot,
   type GuardrailMode,
 } from '@openquery/core';
+import Database from 'better-sqlite3';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
+import { spawn } from 'node:child_process';
 
 let store: LocalStore | null = null;
 const launchEnvOpenAiKey = process.env.OPENAI_API_KEY;
 let desktopInjectedOpenAiKey: string | null = null;
+const DEMO_SQLITE_PROFILE_NAME = 'demo-sqlite';
+const DEMO_POSTGRES_PROFILE_NAME = 'demo-postgres';
+const DEMO_POSTGRES_PORT_KEY = 'demo_postgres_port';
+const DEMO_SQLITE_DB_PATH = join(homedir(), '.openquery', 'demo', 'openquery-demo.sqlite');
+const DOCKER_SERVICE = 'postgres';
+const SQLITE_DEMO_SEED_SQL = `
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  full_name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  is_active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL,
+  total_cents INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS internal_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+DELETE FROM orders;
+DELETE FROM users;
+DELETE FROM internal_audit_log;
+DELETE FROM sqlite_sequence WHERE name IN ('users', 'orders', 'internal_audit_log');
+
+INSERT INTO users (email, full_name, is_active) VALUES
+  ('alice@example.com', 'Alice Nguyen', 1),
+  ('bob@example.com', 'Bob Martinez', 1),
+  ('carol@example.com', 'Carol Singh', 0),
+  ('dana@example.com', 'Dana Brown', 1);
+
+INSERT INTO orders (user_id, status, total_cents) VALUES
+  (1, 'paid', 1250),
+  (1, 'paid', 2450),
+  (2, 'pending', 990),
+  (2, 'failed', 3150),
+  (3, 'paid', 500),
+  (4, 'paid', 10750);
+
+INSERT INTO internal_audit_log (action, actor) VALUES
+  ('seed_loaded', 'system');
+`;
 
 function getStore(): LocalStore {
   if (!store) {
@@ -64,6 +124,164 @@ function applyDesktopOpenAiKey(apiKey?: string): void {
     }
     desktopInjectedOpenAiKey = null;
   }
+}
+
+function ensureDir(path: string): void {
+  if (!existsSync(path)) {
+    mkdirSync(path, { recursive: true });
+  }
+}
+
+function seedSqliteDemoDatabase(dbPath: string): void {
+  ensureDir(dirname(dbPath));
+  const db = new Database(dbPath);
+  try {
+    db.exec(SQLITE_DEMO_SEED_SQL);
+  } finally {
+    db.close();
+  }
+}
+
+function ensureDemoSqliteProfile(storeRef: LocalStore, dbPath: string): StoredProfile {
+  const existing = storeRef.getProfileByName(DEMO_SQLITE_PROFILE_NAME);
+  if (!existing) {
+    const created = storeRef.createProfile({
+      name: DEMO_SQLITE_PROFILE_NAME,
+      db_type: 'sqlite',
+      host: 'local',
+      port: 0,
+      database: dbPath,
+      user: 'demo',
+      ssl: false,
+    });
+    storeRef.setActiveProfile(DEMO_SQLITE_PROFILE_NAME);
+    return created;
+  }
+
+  storeRef.updateProfileConnection(DEMO_SQLITE_PROFILE_NAME, {
+    db_type: 'sqlite',
+    host: 'local',
+    port: 0,
+    database: dbPath,
+    user: 'demo',
+    ssl: false,
+  });
+  storeRef.setActiveProfile(DEMO_SQLITE_PROFILE_NAME);
+  return storeRef.getProfileByName(DEMO_SQLITE_PROFILE_NAME) as StoredProfile;
+}
+
+function ensureDemoPostgresProfile(storeRef: LocalStore, port: number): StoredProfile {
+  const existing = storeRef.getProfileByName(DEMO_POSTGRES_PROFILE_NAME);
+  if (!existing) {
+    const created = storeRef.createProfile({
+      name: DEMO_POSTGRES_PROFILE_NAME,
+      db_type: 'postgres',
+      host: '127.0.0.1',
+      port,
+      database: 'openquery_test',
+      user: 'openquery',
+      ssl: false,
+    });
+    storeRef.setActiveProfile(DEMO_POSTGRES_PROFILE_NAME);
+    return created;
+  }
+
+  storeRef.updateProfileConnection(DEMO_POSTGRES_PROFILE_NAME, {
+    db_type: 'postgres',
+    host: '127.0.0.1',
+    port,
+    database: 'openquery_test',
+    user: 'openquery',
+    ssl: false,
+  });
+  storeRef.setActiveProfile(DEMO_POSTGRES_PROFILE_NAME);
+  return storeRef.getProfileByName(DEMO_POSTGRES_PROFILE_NAME) as StoredProfile;
+}
+
+function getRepoRoot(): string | null {
+  let cursor = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 10; i += 1) {
+    if (existsSync(join(cursor, 'infra', 'docker', 'docker-compose.yml'))) {
+      return cursor;
+    }
+    const next = dirname(cursor);
+    if (next === cursor) break;
+    cursor = next;
+  }
+  return null;
+}
+
+function getComposeFilePath(): string {
+  const root = getRepoRoot();
+  if (!root) {
+    throw new Error('Docker compose file not found. Use Demo (No Docker) mode.');
+  }
+  return join(root, 'infra', 'docker', 'docker-compose.yml');
+}
+
+function runProcess(
+  command: string,
+  args: string[],
+  opts: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const proc = spawn(command, args, {
+      env: opts.env ?? process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    proc.on('error', (err) => {
+      resolve({ code: 127, stdout, stderr: `${stderr}\n${String(err.message)}`.trim() });
+    });
+    let timeout: NodeJS.Timeout | null = null;
+    if (opts.timeoutMs && opts.timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        proc.kill('SIGTERM');
+      }, opts.timeoutMs);
+    }
+    proc.on('close', (code) => {
+      if (timeout) clearTimeout(timeout);
+      resolve({ code: code ?? 1, stdout, stderr });
+    });
+  });
+}
+
+async function checkPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function selectFreePort(preferred: number[]): Promise<number> {
+  const deduped = [...new Set(preferred.filter((p) => Number.isInteger(p) && p > 0 && p < 65535))];
+  for (const port of deduped) {
+    if (await checkPortFree(port)) return port;
+  }
+  for (let i = 0; i < 20; i += 1) {
+    const random = 55000 + Math.floor(Math.random() * 1000);
+    if (await checkPortFree(random)) return random;
+  }
+  throw new Error('No free localhost port found in the demo range (55000-56000).');
+}
+
+async function getComposeContainerId(composeFile: string): Promise<string> {
+  const ps = await runProcess('docker', ['compose', '-f', composeFile, 'ps', '-q', DOCKER_SERVICE]);
+  if (ps.code !== 0) return '';
+  return ps.stdout.trim();
 }
 
 // ── Profile handlers ──────────────────────────────────────────────
@@ -136,16 +354,15 @@ export function profilesGetActive(): { name: string | null } {
 export async function schemaRefresh(params: { name?: string; password: string }): Promise<{ tables: number; columns: number }> {
   const s = getStore();
   const profile = getProfile(params.name);
-  const snapshot = await introspectSchema(
-    {
-      host: profile.host ?? 'localhost',
-      port: profile.port ?? 5432,
-      database: profile.database ?? '',
-      user: profile.user ?? '',
-      ssl: profile.ssl === 1,
-    },
-    params.password,
-  );
+  const snapshot = await introspectSchemaForConnection({
+    dbType: profile.db_type,
+    host: profile.host ?? 'localhost',
+    port: profile.port ?? 5432,
+    database: profile.database ?? '',
+    user: profile.user ?? '',
+    password: params.password,
+    ssl: profile.ssl === 1,
+  });
   const snapshotJson = JSON.stringify(snapshot);
   s.storeSchemaSnapshot(profile.id, snapshotJson);
   s.logAudit('schema_refreshed', { profile: profile.name });
@@ -580,6 +797,229 @@ export async function settingsTestOpenAiKey(params: { apiKey?: string }): Promis
   }
 }
 
+// ── Setup + fixture handlers ───────────────────────────────────────
+
+export function demoNoDockerStatus(): {
+  ready: boolean;
+  dbPath: string;
+  active: boolean;
+  profileName: string;
+} {
+  const s = getStore();
+  const profile = s.getProfileByName(DEMO_SQLITE_PROFILE_NAME);
+  return {
+    ready: existsSync(DEMO_SQLITE_DB_PATH),
+    dbPath: DEMO_SQLITE_DB_PATH,
+    active: s.getActiveProfile() === DEMO_SQLITE_PROFILE_NAME,
+    profileName: DEMO_SQLITE_PROFILE_NAME,
+  };
+}
+
+export function demoNoDockerPrepare(params: { reset?: boolean } = {}): {
+  ready: boolean;
+  dbPath: string;
+  profileName: string;
+} {
+  if (params.reset && existsSync(DEMO_SQLITE_DB_PATH)) {
+    rmSync(DEMO_SQLITE_DB_PATH, { force: true });
+  }
+  if (!existsSync(DEMO_SQLITE_DB_PATH)) {
+    seedSqliteDemoDatabase(DEMO_SQLITE_DB_PATH);
+  }
+  const s = getStore();
+  ensureDemoSqliteProfile(s, DEMO_SQLITE_DB_PATH);
+  s.logAudit(params.reset ? 'demo_sqlite_reset' : 'demo_sqlite_ready', {
+    db_path: DEMO_SQLITE_DB_PATH,
+  });
+  return {
+    ready: true,
+    dbPath: DEMO_SQLITE_DB_PATH,
+    profileName: DEMO_SQLITE_PROFILE_NAME,
+  };
+}
+
+export function demoNoDockerReset(): {
+  ready: boolean;
+  dbPath: string;
+  profileName: string;
+} {
+  return demoNoDockerPrepare({ reset: true });
+}
+
+export async function fixtureCheckDocker(): Promise<{
+  installed: boolean;
+  daemonRunning: boolean;
+  message?: string;
+}> {
+  const version = await runProcess('docker', ['--version'], { timeoutMs: 5_000 });
+  if (version.code !== 0) {
+    return {
+      installed: false,
+      daemonRunning: false,
+      message: 'Docker is not installed. Install Docker Desktop or use Demo (No Docker).',
+    };
+  }
+  const info = await runProcess('docker', ['info'], { timeoutMs: 8_000 });
+  if (info.code !== 0) {
+    return {
+      installed: true,
+      daemonRunning: false,
+      message: 'Docker daemon is not running. Start Docker Desktop or use Demo (No Docker).',
+    };
+  }
+  return { installed: true, daemonRunning: true };
+}
+
+export async function fixturePickPort(params: { preferredPorts?: number[] } = {}): Promise<{ port: number }> {
+  const s = getStore();
+  const remembered = Number(s.getSetting(DEMO_POSTGRES_PORT_KEY) ?? '');
+  const preferred = [
+    ...(params.preferredPorts ?? [5432, 55432, 55433, 55434]),
+    ...(Number.isFinite(remembered) ? [remembered] : []),
+  ];
+  const port = await selectFreePort(preferred);
+  s.setSetting(DEMO_POSTGRES_PORT_KEY, String(port));
+  return { port };
+}
+
+export async function fixtureStatus(): Promise<{ running: boolean; port?: number; message?: string }> {
+  const docker = await fixtureCheckDocker();
+  if (!docker.installed || !docker.daemonRunning) {
+    return { running: false, message: docker.message };
+  }
+
+  const composeFile = getComposeFilePath();
+  const cid = await getComposeContainerId(composeFile);
+  if (!cid) {
+    const rememberedPort = Number(getStore().getSetting(DEMO_POSTGRES_PORT_KEY) ?? '');
+    return {
+      running: false,
+      port: Number.isFinite(rememberedPort) ? rememberedPort : undefined,
+    };
+  }
+
+  const portRes = await runProcess('docker', ['port', cid, '5432/tcp'], { timeoutMs: 5_000 });
+  let hostPort: number | undefined;
+  if (portRes.code === 0) {
+    const match = portRes.stdout.match(/:(\d+)\s*$/m);
+    if (match) {
+      hostPort = Number(match[1]);
+    }
+  }
+  if (hostPort) {
+    getStore().setSetting(DEMO_POSTGRES_PORT_KEY, String(hostPort));
+  }
+  return { running: true, port: hostPort };
+}
+
+export async function fixtureLogs(params: { tail?: number } = {}): Promise<{ lines: string[] }> {
+  const composeFile = getComposeFilePath();
+  const tail = Math.max(1, Math.min(500, params.tail ?? 50));
+  const result = await runProcess(
+    'docker',
+    ['compose', '-f', composeFile, 'logs', '--tail', String(tail), DOCKER_SERVICE],
+    { timeoutMs: 10_000 },
+  );
+  const text = `${result.stdout}\n${result.stderr}`.trim();
+  return {
+    lines: text ? text.split('\n').slice(-tail) : [],
+  };
+}
+
+export async function fixtureUp(params: { port: number }): Promise<{
+  running: boolean;
+  port: number;
+  profileName: string;
+}> {
+  const docker = await fixtureCheckDocker();
+  if (!docker.installed || !docker.daemonRunning) {
+    throw new Error(docker.message || 'Docker is unavailable. Use Demo (No Docker) mode.');
+  }
+  if (!Number.isInteger(params.port) || params.port <= 0 || params.port > 65535) {
+    throw new Error('Invalid port supplied for Docker fixture.');
+  }
+  const composeFile = getComposeFilePath();
+  const env = { ...process.env, OPENQUERY_PG_PORT: String(params.port) };
+  const up = await runProcess('docker', ['compose', '-f', composeFile, 'up', '-d'], { env, timeoutMs: 20_000 });
+  if (up.code !== 0) {
+    const output = `${up.stdout}\n${up.stderr}`;
+    if (/address already in use/i.test(output)) {
+      throw new Error('Selected port is already in use. Choose another free port and retry.');
+    }
+    throw new Error(`Failed to start Docker fixture: ${output.trim()}`);
+  }
+
+  const startAt = Date.now();
+  let cid = '';
+  let isReady = false;
+  while (Date.now() - startAt < 60_000) {
+    cid = await getComposeContainerId(composeFile);
+    if (cid) {
+      const readyResult = await runProcess(
+        'docker',
+        ['exec', cid, 'pg_isready', '-U', 'openquery', '-d', 'openquery_test'],
+        { timeoutMs: 5_000 },
+      );
+      if (readyResult.code === 0) {
+        isReady = true;
+        break;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+
+  if (!cid || !isReady) {
+    const logs = await fixtureLogs({ tail: 50 });
+    throw new Error(`Fixture container did not start.\n${logs.lines.join('\n')}`);
+  }
+
+  const usersTable = await runProcess(
+    'docker',
+    ['exec', '-i', cid, 'psql', '-U', 'openquery', '-d', 'openquery_test', '-t', '-A', '-c', "SELECT to_regclass('public.users') IS NOT NULL;"],
+    { timeoutMs: 5_000 },
+  );
+  if (usersTable.code !== 0 || usersTable.stdout.trim() !== 't') {
+    const logs = await fixtureLogs({ tail: 50 });
+    throw new Error(`Seed verification failed (users table missing).\n${logs.lines.join('\n')}`);
+  }
+
+  const usersCount = await runProcess(
+    'docker',
+    ['exec', '-i', cid, 'psql', '-U', 'openquery', '-d', 'openquery_test', '-t', '-A', '-c', 'SELECT COUNT(*) FROM users;'],
+    { timeoutMs: 5_000 },
+  );
+  const count = Number(usersCount.stdout.trim());
+  if (usersCount.code !== 0 || !Number.isFinite(count) || count <= 0) {
+    const logs = await fixtureLogs({ tail: 50 });
+    throw new Error(`Seed verification failed (users row count invalid).\n${logs.lines.join('\n')}`);
+  }
+
+  const s = getStore();
+  ensureDemoPostgresProfile(s, params.port);
+  s.setSetting(DEMO_POSTGRES_PORT_KEY, String(params.port));
+  s.logAudit('demo_postgres_up', { port: params.port });
+
+  return {
+    running: true,
+    port: params.port,
+    profileName: DEMO_POSTGRES_PROFILE_NAME,
+  };
+}
+
+export async function fixtureDown(): Promise<{ ok: boolean }> {
+  const docker = await fixtureCheckDocker();
+  if (!docker.installed || !docker.daemonRunning) {
+    throw new Error(docker.message || 'Docker is unavailable.');
+  }
+  const composeFile = getComposeFilePath();
+  const result = await runProcess('docker', ['compose', '-f', composeFile, 'down', '-v'], { timeoutMs: 20_000 });
+  if (result.code !== 0) {
+    throw new Error(`Failed to stop Docker fixture: ${`${result.stdout}\n${result.stderr}`.trim()}`);
+  }
+  getStore().logAudit('demo_postgres_down');
+  return { ok: true };
+}
+
 // ── Power mode handlers ──────────────────────────────────────────
 
 export function profileUpdatePower(params: {
@@ -698,6 +1138,15 @@ const METHODS: Record<string, MethodHandler> = {
   'history.exportMd': historyExportMd,
   'settings.status': settingsStatus,
   'settings.testOpenAiKey': settingsTestOpenAiKey,
+  'demo.noDockerStatus': demoNoDockerStatus,
+  'demo.noDockerPrepare': demoNoDockerPrepare,
+  'demo.noDockerReset': demoNoDockerReset,
+  'fixture.checkDocker': fixtureCheckDocker,
+  'fixture.pickPort': fixturePickPort,
+  'fixture.status': fixtureStatus,
+  'fixture.up': fixtureUp,
+  'fixture.down': fixtureDown,
+  'fixture.logs': fixtureLogs,
   'profile.updatePower': profileUpdatePower,
   'profile.getPower': profileGetPower,
   'write.preview': writePreviewHandler,

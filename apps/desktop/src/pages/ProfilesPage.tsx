@@ -4,6 +4,7 @@ import * as api from '../api';
 interface ProfileState {
   id: string;
   name: string;
+  db_type: string;
   host: string;
   port: number;
   database: string;
@@ -20,7 +21,7 @@ interface PowerState {
 interface Props {
   password: string;
   activeProfile: string | null;
-  onProfilesChanged: (profiles: Array<{ id: string; name: string }>, active: string | null) => void;
+  onProfilesChanged: (profiles: Array<{ id: string; name: string; db_type: string }>, active: string | null) => void;
   onConnectionStatusChange: (status: 'unknown' | 'ok' | 'error') => void;
 }
 
@@ -53,7 +54,7 @@ export default function ProfilesPage({
       const [list, active] = await Promise.all([api.profilesList(), api.profilesGetActive()]);
       setProfiles(list as ProfileState[]);
       onProfilesChanged(
-        (list as ProfileState[]).map((p) => ({ id: p.id, name: p.name })),
+        (list as ProfileState[]).map((p) => ({ id: p.id, name: p.name, db_type: p.db_type })),
         active.name,
       );
       const powerEntries = await Promise.all(
@@ -80,9 +81,10 @@ export default function ProfilesPage({
     load();
   }, []);
 
-  const resolvePassword = async (profileId: string): Promise<string | null> => {
+  const resolvePassword = async (profile: Pick<ProfileState, 'id' | 'db_type'>): Promise<string | null> => {
+    if (profile.db_type === 'sqlite') return '';
     if (password.trim()) return password;
-    const stored = await api.keychainGet(profileId);
+    const stored = await api.keychainGet(profile.id);
     return stored;
   };
 
@@ -158,7 +160,7 @@ export default function ProfilesPage({
     setStatus('');
     setLoadingName(profile.name);
     try {
-      const resolved = await resolvePassword(profile.id);
+      const resolved = await resolvePassword(profile);
       if (!resolved) {
         setError('No password found. Enter a session password or save one in keychain.');
         onConnectionStatusChange('error');
@@ -191,7 +193,7 @@ export default function ProfilesPage({
     setStatus('');
     setLoadingName(profile.name);
     try {
-      const resolved = await resolvePassword(profile.id);
+      const resolved = await resolvePassword(profile);
       if (!resolved) {
         setError('No password found. Enter a session password or save one in keychain.');
         return;

@@ -6,6 +6,7 @@ import { getOpenAIKey } from '../lib/secretStore';
 interface Props {
   password: string;
   activeProfile: string | null;
+  activeProfileType: string | null;
   safePolicy: SafePolicySettings;
   powerEnabled: boolean;
   draft: { question?: string; sql?: string } | null;
@@ -79,6 +80,7 @@ function classifySqlText(sql: string): SqlClassification {
 export default function WorkspacePage({
   password,
   activeProfile,
+  activeProfileType,
   safePolicy,
   powerEnabled,
   draft,
@@ -115,6 +117,7 @@ export default function WorkspacePage({
   const [page, setPage] = useState(1);
   const pageSize = 25;
   const examplePrompts = ['Show active users', 'Top spenders', 'Recent paid orders'];
+  const requiresPassword = activeProfileType !== 'sqlite';
 
   const loadSnapshot = async (): Promise<void> => {
     if (!activeProfile) {
@@ -223,7 +226,8 @@ export default function WorkspacePage({
 
   const handleRefreshSchema = async (): Promise<void> => {
     if (!activeProfile) return;
-    if (!password.trim()) {
+    const resolvedPassword = requiresPassword ? password.trim() : '';
+    if (requiresPassword && !resolvedPassword) {
       setError('Enter a session password, then refresh schema.');
       return;
     }
@@ -232,7 +236,7 @@ export default function WorkspacePage({
     setStatus('');
     setLoadingSchema(true);
     try {
-      await api.schemaRefresh(password);
+      await api.schemaRefresh(resolvedPassword);
       await loadSnapshot();
       setStatus('Schema snapshot refreshed.');
     } catch (err: unknown) {
@@ -246,7 +250,8 @@ export default function WorkspacePage({
 
   const runAsk = async (execute: boolean): Promise<void> => {
     if (!question.trim()) return;
-    if (!password.trim()) {
+    const resolvedPassword = requiresPassword ? password.trim() : '';
+    if (requiresPassword && !resolvedPassword) {
       setError('Enter a session password before running Ask.');
       return;
     }
@@ -265,8 +270,8 @@ export default function WorkspacePage({
         return;
       }
       const askResult = execute
-        ? await api.askRun(question, askMode, password, storedKey)
-        : await api.askDryRun(question, askMode, password, storedKey);
+        ? await api.askRun(question, askMode, resolvedPassword, storedKey)
+        : await api.askDryRun(question, askMode, resolvedPassword, storedKey);
       const classification = classifySqlText(askResult?.plan?.sql ?? '');
       setResult({
         status: askResult.status,
@@ -299,7 +304,8 @@ export default function WorkspacePage({
 
   const runSqlAction = async (action: 'run' | 'dry-run' | 'explain'): Promise<void> => {
     if (!sqlText.trim()) return;
-    if (!password.trim()) {
+    const resolvedPassword = requiresPassword ? password.trim() : '';
+    if (requiresPassword && !resolvedPassword) {
       setError('Enter a session password before running SQL.');
       return;
     }
@@ -311,7 +317,7 @@ export default function WorkspacePage({
         sql: sqlText,
         mode: sqlMode,
         action,
-        password,
+        password: resolvedPassword,
         policy: safePolicy,
       });
       setResult({
@@ -340,14 +346,15 @@ export default function WorkspacePage({
       setError('POWER mode is disabled for the active profile. Enable it in Profiles.');
       return;
     }
-    if (!password.trim()) {
+    const resolvedPassword = requiresPassword ? password.trim() : '';
+    if (requiresPassword && !resolvedPassword) {
       setError('Enter a session password before write preview.');
       return;
     }
     setRunning(true);
     setError('');
     try {
-      const preview = await api.writePreview(sql, params, password);
+      const preview = await api.writePreview(sql, params, resolvedPassword);
       setWritePreview(preview);
       setPendingSql(sql);
       setPendingParams(params);
@@ -378,8 +385,9 @@ export default function WorkspacePage({
     setShowWriteModal(false);
     setRunning(true);
     setError('');
+    const resolvedPassword = requiresPassword ? password.trim() : '';
     try {
-      const writeResult = await api.writeExecute(pendingSql, pendingParams, password);
+      const writeResult = await api.writeExecute(pendingSql, pendingParams, resolvedPassword);
       setResult((prev) => ({
         ...(prev ?? {
           status: 'ok',
