@@ -4,32 +4,62 @@ This document covers reproducible release builds for OpenQuery on macOS.
 
 ## Prerequisites
 
-- Node.js 18+
-- pnpm 8+
+- Node.js 20 LTS
+- pnpm 9
 - Rust toolchain (`rustup`)
 - Xcode Command Line Tools (`xcode-select --install`)
 
 ## Install dependencies
 
 ```bash
-pnpm install --frozen-lockfile
+pnpm install
 ```
 
-## Build all workspace packages
+## Workspace verification baseline
 
 ```bash
 pnpm -r build
+pnpm -r test
+pnpm lint
+pnpm typecheck
 ```
 
-## Desktop app bundle (macOS)
+## Docker fixture check (required for integration verification)
 
-Build a signed-ready `.app` bundle:
+```bash
+docker info
+OPENQUERY_PG_PORT=55432 pnpm smoke:docker
+OPENQUERY_PG_PORT=55432 OPENQUERY_PG_HOST=127.0.0.1 pnpm --filter @openquery/core test:integration
+```
+
+## CLI release sanity
+
+```bash
+pnpm -C apps/cli build
+node apps/cli/dist/main.js --help
+node apps/cli/dist/main.js doctor
+```
+
+Optional helper path:
+
+```bash
+pnpm openquery:build -- doctor
+```
+
+## Desktop compile checks
+
+```bash
+pnpm --filter @openquery/desktop build
+pnpm --filter @openquery/desktop tauri build --no-bundle
+```
+
+## Desktop bundle (distribution build)
 
 ```bash
 pnpm --filter @openquery/desktop build:bundle
 ```
 
-Bundle artifacts are produced under:
+Bundle artifact path:
 
 - `apps/desktop/src-tauri/target/release/bundle/macos/`
 
@@ -40,26 +70,4 @@ For distribution, sign and notarize in your release environment:
 
 ```bash
 codesign --deep --force --options runtime --sign "Developer ID Application: <TEAM>" "apps/desktop/src-tauri/target/release/bundle/macos/OpenQuery.app"
-```
-
-## CLI package build
-
-```bash
-pnpm --filter @openquery/cli build
-```
-
-The compiled executable entrypoint is:
-
-- `apps/cli/dist/main.js`
-
-Global install path after publish:
-
-```bash
-npm i -g @openquery/cli
-```
-
-Local run without global install:
-
-```bash
-pnpm --filter @openquery/cli exec openquery --help
 ```

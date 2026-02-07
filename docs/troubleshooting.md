@@ -1,47 +1,104 @@
 # Troubleshooting
 
-## Postgres connection fails
+## Docker daemon is not running
 
-Symptoms:
+Symptom:
 
-- `Connection failed`
-- `password authentication failed`
-- `database does not exist`
+- `Cannot connect to the Docker daemon ... docker.sock`
 
-Checks:
+Fix:
 
-```bash
-cd infra/docker
-docker compose ps
-```
-
-Expected defaults from `infra/docker/docker-compose.yml`:
-
-- host `127.0.0.1`
-- port `5432`
-- database `openquery_test`
-- user `openquery`
-- password `openquery_dev`
-
-## Schema refresh says no active profile
-
-Set an active profile first:
+1. Start Docker Desktop.
+2. Re-run:
 
 ```bash
-pnpm --filter @openquery/cli exec openquery profiles use demo
+docker info
+OPENQUERY_PG_PORT=55432 pnpm smoke:docker
 ```
 
-## Ask command timeouts
+## Postgres fixture port conflict
 
-- Verify DB connectivity first with `profiles test`.
-- Reduce query complexity or use `--dry-run`.
-- Check safe timeout defaults in `SAFE_DEFAULTS` (15s statement timeout).
+Symptom:
 
-## OPENAI key errors
+- `address already in use` on `5432`
 
-Symptoms:
+Check who owns the port:
 
-- `OPENAI_API_KEY environment variable is not set`
+```bash
+lsof -nP -iTCP:5432 -sTCP:LISTEN
+lsof -nP -iTCP:5433 -sTCP:LISTEN
+```
+
+Use a free host port:
+
+```bash
+OPENQUERY_PG_PORT=55432 pnpm smoke:docker
+OPENQUERY_PG_PORT=55432 OPENQUERY_PG_HOST=127.0.0.1 pnpm --filter @openquery/core test:integration
+```
+
+## Seed data not updating
+
+Symptom:
+
+- fixture starts but expected seed changes are missing
+
+Cause:
+
+- `seed.sql` in `/docker-entrypoint-initdb.d` runs only when volume is initialized
+
+Fix:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml down -v
+OPENQUERY_PG_PORT=55432 pnpm smoke:docker
+```
+
+## macOS `EPERM` / `uv_cwd` when repo is in `~/Documents`
+
+Fix options:
+
+1. Move repo to `~/dev/OpenQuery` (recommended), or
+2. Grant Full Disk Access to your terminal app and relaunch terminal
+
+## macOS `rsync --info=progress2` flag error
+
+Cause:
+
+- Apple `rsync` does not support GNU-only `--info=progress2`
+
+Use:
+
+```bash
+rsync -aP /path/from/OpenQuery/ ~/dev/OpenQuery/
+```
+
+Fallback:
+
+```bash
+cp -R /path/from/OpenQuery ~/dev/OpenQuery
+```
+
+## CLI helper argument forwarding confusion
+
+Use deterministic direct CLI commands:
+
+```bash
+pnpm -C apps/cli build
+node apps/cli/dist/main.js --help
+node apps/cli/dist/main.js doctor
+```
+
+Root helper remains available:
+
+```bash
+pnpm openquery:build -- doctor
+```
+
+## `OPENAI_API_KEY` missing
+
+Symptom:
+
+- Ask flow fails with key-not-set error
 
 Fix:
 
@@ -49,42 +106,22 @@ Fix:
 export OPENAI_API_KEY=sk-...
 ```
 
-## macOS keychain issues (Desktop)
+Desktop behavior:
 
-Symptoms:
+- Workspace shows an explicit callout and does not crash.
 
-- password not saved/retrieved from keychain
+## Desktop build failures
 
-Checks:
-
-- Ensure app has keychain access permission in macOS prompts.
-- Try deleting and re-saving the profile password.
-- Restart the desktop app after granting keychain permission.
-
-## Desktop Tauri build errors
-
-Install/update prerequisites:
+Prerequisites:
 
 ```bash
 xcode-select --install
 rustup update
 ```
 
-Then rebuild:
+Compile checks:
 
 ```bash
-pnpm --filter @openquery/desktop build:bridge
-pnpm --filter @openquery/desktop build:bundle
-```
-
-## Eval execution mode fails
-
-If `OPENQUERY_EVAL_EXECUTE=1 pnpm eval` fails:
-
-- Ensure Postgres is running (`docker compose up -d` under `infra/docker`)
-- Ensure port/user/password match env defaults
-- Rerun without execution mode to validate deterministic offline checks:
-
-```bash
-pnpm eval
+pnpm --filter @openquery/desktop build
+pnpm --filter @openquery/desktop tauri build --no-bundle
 ```

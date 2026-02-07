@@ -1,102 +1,67 @@
 # OpenQuery
 
-OpenQuery is a local-first SQL copilot for Postgres with strict guardrails.
-It turns natural language into SQL, validates and rewrites queries via AST-based policy checks, gates execution with EXPLAIN, and supports controlled write operations through POWER mode confirmations.
+OpenQuery is a local-first SQL copilot for PostgreSQL with policy guardrails.
 
-## Why OpenQuery Is Different
+## What Is OpenQuery
 
-- AST guardrails, not regex-only checks
-- EXPLAIN gating before execution in safe mode
-- POWER mode write flow with typed confirmations and audit events
-- Local-first architecture with local profile/history storage
-- Deterministic eval harness for safety + correctness regression checks
+- Natural-language to SQL flow with explicit safety checks before execution
+- Local-first state: profiles, schema snapshots, history, and audit log stay on-device
+- Dual surface: CLI plus Tauri desktop app backed by the same core engine
 
-## Feature List
+## How It Is Different
 
-- Natural-language `ask` flow with SQL generation
-- Safe-mode policy engine with LIMIT injection/clamping
-- Statement classification (`read` / `write` / `dangerous`)
-- Write preview + confirmation phrases + execution audit trail
-- Schema introspection and local schema snapshots
-- Query history with Markdown export
-- Desktop app (Tauri + React + bridge)
-- CLI workflow for scripting and demos
+- Guardrails: AST-based SQL classification and rewrite, not regex-only checks
+- Explain gating: safe mode can block high-cost/high-row plans before execution
+- POWER mode: write operations require preview + typed confirmation
+- Eval harness: deterministic offline regression checks for policy and generation outputs
 
-## Quickstart (CLI)
+## Start Here
 
-Prerequisites:
+- Setup guide: `docs/dev-setup.md`
+- Docker fixture guide: `docs/docker-setup.md`
+- Smoke checklist: `docs/smoke.md`
+- Recruiter quick demo: `docs/recruiter-demo.md`
 
-- Node.js 18+
-- pnpm 8+
-- Docker (for local Postgres fixture)
-- `OPENAI_API_KEY` for LLM generation commands
+## Canonical Health Checks
+
+Run from repo root:
 
 ```bash
 pnpm install
 pnpm -r build
-
-# Start fixture Postgres
-cd infra/docker
-docker compose up -d
-cd ../..
-
-# Build CLI
-pnpm --filter @openquery/cli build
-
-# Create profile
-pnpm --filter @openquery/cli exec openquery profiles add \
-  --name local \
-  --type postgres \
-  --host 127.0.0.1 \
-  --port 5432 \
-  --database openquery_test \
-  --user openquery
-
-# Refresh schema snapshot
-pnpm --filter @openquery/cli exec openquery schema refresh --name local
-
-# Dry-run ask
-OPENAI_API_KEY=sk-... pnpm --filter @openquery/cli exec openquery ask "show active users" --dry-run
+pnpm -r test
+pnpm lint
+pnpm typecheck
 ```
 
-## Quickstart (Desktop)
+## CLI (Deterministic Local Run)
 
 ```bash
-pnpm install
-pnpm --filter @openquery/core build
-pnpm --filter @openquery/desktop build:bridge
-cd apps/desktop
-pnpm tauri dev
+pnpm -C apps/cli build
+node apps/cli/dist/main.js --help
+node apps/cli/dist/main.js doctor
 ```
 
-For release bundle instructions see `docs/release.md`.
+## Desktop Build Check (No Bundle)
 
-## Security Model Overview
+```bash
+pnpm --filter @openquery/desktop build
+pnpm --filter @openquery/desktop tauri build --no-bundle
+```
 
-- Policy engine parses SQL into AST and enforces statement-level rules.
-- Safe mode blocks writes and dangerous statements by default.
-- EXPLAIN gating can block high-cost/high-row-risk reads before execution.
-- POWER mode requires explicit profile opt-in and typed confirmation phrases.
-- Audit events are written locally for profile changes, previews, blocked writes, and executions.
+## Node and pnpm Policy
 
-Data boundary:
+- Target runtime for parity with CI: Node 20 LTS
+- Local Node 24 may work, but it is not the compatibility target
+- Recommended package manager: pnpm 9.x
 
-- OpenAI calls receive question + selected schema context.
-- Database credentials and query result rows stay local.
-- Full details: `docs/security.md`.
+## Security Model
 
-## Threat Model Summary
+- OpenAI prompt boundary includes only question + schema metadata + policy context
+- Query results and credentials are not sent to the LLM
+- Full details: `docs/security.md` and `docs/threat-model.md`
 
-Threat scenarios, trust boundaries, and mitigations are documented in `docs/threat-model.md`.
+## Evaluation
 
-## Evaluation and Benchmarks
-
-- Eval harness: `pnpm eval` (offline deterministic by default)
+- Eval harness: `pnpm eval`
 - Benchmarks: `pnpm bench`
-
-See `docs/eval.md` and `docs/benchmarks.md`.
-
-## Planned
-
-- MySQL adapter support is intentionally deferred to Phase 7.
-- Phase 6 ships with a friendly MySQL adapter stub and explicit "planned" messaging.
