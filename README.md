@@ -44,7 +44,6 @@ Teams want AI-assisted querying, but do not want unbounded query risk.
 - Eval harness and benchmark scripts for regression tracking
 
 ## Screenshots
-> Note: screenshots were captured from current app flows; web capture may show bridge guidance when run outside native Tauri.
 
 ![Setup](assets/screenshots/setup.png)
 ![Workspace](assets/screenshots/workspace.png)
