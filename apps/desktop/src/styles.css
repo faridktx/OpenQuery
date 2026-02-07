@@ -103,11 +103,10 @@ select:focus {
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(140deg, #0f7a52, #0d5e4f);
-  color: #fff;
-  font-weight: 700;
+  object-fit: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 4px;
 }
 
 .brand-mark h1 {

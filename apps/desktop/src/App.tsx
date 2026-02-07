@@ -230,7 +230,11 @@ export default function App() {
     <div className="app-shell">
       <aside className="side-nav">
         <div className="brand-mark">
-          <span className="brand-mark__logo">OQ</span>
+          <img
+            src="/openquerylogo.png"
+            alt="OpenQuery logo"
+            className="brand-mark__logo"
+          />
           <div>
             <h1>OpenQuery</h1>
             <p>Desktop SQL Copilot</p>
