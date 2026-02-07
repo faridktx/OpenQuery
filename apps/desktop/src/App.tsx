@@ -329,21 +329,9 @@ export default function App() {
                 ))}
               </select>
             </label>
-            <button type="button" className="btn btn-secondary" onClick={testActiveConnection}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={testActiveConnection}>
               Test Connection
             </button>
-            <div className="top-status">
-              <span className={`status-pill status-${connectionStatus}`}>
-                <span className="status-dot" />
-                {connectionStatus === 'ok' ? 'Connected' : connectionStatus === 'error' ? 'Connection failed' : 'Connection unknown'}
-              </span>
-              <span className={`status-pill ${setupState.needsSetup ? 'status-schema-warn' : 'status-schema-ok'}`}>
-                {schemaStateLabel}
-              </span>
-              <span className={`status-pill ${aiReady ? 'status-ai-ok' : 'status-ai-warn'}`}>
-                {aiReady ? 'AI key ready' : 'AI key missing'}
-              </span>
-            </div>
           </div>
 
           <div className="top-bar__right">
@@ -388,6 +376,18 @@ export default function App() {
                 Help
               </button>
             </div>
+          </div>
+          <div className="top-status top-status-row">
+            <span className={`status-pill status-${connectionStatus}`}>
+              <span className="status-dot" />
+              {connectionStatus === 'ok' ? 'Connected' : connectionStatus === 'error' ? 'Connection failed' : 'Connection unknown'}
+            </span>
+            <span className={`status-pill ${setupState.needsSetup ? 'status-schema-warn' : 'status-schema-ok'}`}>
+              {schemaStateLabel}
+            </span>
+            <span className={`status-pill ${aiReady ? 'status-ai-ok' : 'status-ai-warn'}`}>
+              {aiReady ? 'AI key ready' : 'AI key missing'}
+            </span>
           </div>
         </header>
 
