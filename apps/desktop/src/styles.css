@@ -10,6 +10,7 @@ body {
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
+  font-weight: var(--weight-body);
   color: var(--color-text);
   background:
     radial-gradient(140% 120% at 0% 0%, var(--color-bg-soft) 0%, transparent 55%),
@@ -25,10 +26,12 @@ h4 {
   font-family: "Fraunces", "Iowan Old Style", "Georgia", serif;
   color: var(--color-text);
   line-height: var(--line-height-tight);
+  font-weight: var(--weight-heading);
 }
 
 h1 { font-size: var(--font-size-h1); }
 h2 { font-size: var(--font-size-h2); }
+h3 { font-size: var(--font-size-h3); }
 
 p { margin: 0; }
 
@@ -302,7 +305,7 @@ summary:focus-visible {
 }
 
 .main-content-inner {
-  max-width: 1240px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
@@ -323,7 +326,7 @@ summary:focus-visible {
 
 .page-stack {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 .page-header {
@@ -333,6 +336,36 @@ summary:focus-visible {
 
 .page-header p {
   color: var(--color-text-muted);
+}
+
+.prose {
+  max-width: 76ch;
+  line-height: 1.62;
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stack-sm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.stack-lg {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.divider {
+  border-top: 1px solid var(--color-border);
+  margin: var(--space-2) 0;
 }
 
 .card,
@@ -367,7 +400,7 @@ summary:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .inline-error,
@@ -398,6 +431,10 @@ summary:focus-visible {
   background: color-mix(in srgb, var(--color-warning), transparent 92%);
   display: grid;
   gap: var(--space-2);
+}
+
+.callout p {
+  max-width: 76ch;
 }
 
 .preserve-lines {
@@ -472,6 +509,7 @@ summary:focus-visible {
   padding: var(--space-3);
   border-bottom: 1px solid var(--color-border);
   vertical-align: top;
+  min-height: 42px;
 }
 
 .clickable {
@@ -540,7 +578,7 @@ summary:focus-visible {
 
 .workspace-shell {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 .workspace-header {
@@ -553,7 +591,7 @@ summary:focus-visible {
 .workspace-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: var(--space-4);
+  gap: var(--space-5);
   align-items: start;
 }
 
@@ -687,19 +725,38 @@ summary:focus-visible {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .inspector-section summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--weight-heading);
   margin-bottom: var(--space-2);
 }
 
 .inspector-body {
   display: grid;
   gap: var(--space-2);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.metric-pill {
+  display: grid;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: var(--space-2);
+}
+
+.metric-pill strong {
+  font-weight: var(--weight-heading);
 }
 
 pre {
@@ -732,6 +789,11 @@ pre {
 .muted {
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
+}
+
+.subtle {
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
 .modal-overlay {
@@ -768,7 +830,7 @@ pre {
 
 .quickstart-stepper {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-2);
 }
 
@@ -803,9 +865,21 @@ pre {
 
 .quickstart-panel {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   background: var(--color-surface);
   border-color: var(--color-border);
+}
+
+.quickstart-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.quickstart-step-body {
+  display: grid;
+  gap: var(--space-4);
 }
 
 .quickstart-mode-grid {
@@ -839,7 +913,7 @@ pre {
 .quickstart-results-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .quickstart-done {
@@ -863,6 +937,14 @@ pre {
   }
 
   .quickstart-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quickstart-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 }

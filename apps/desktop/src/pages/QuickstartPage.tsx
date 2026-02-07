@@ -75,12 +75,6 @@ const DOCKER_DEFAULTS = {
 };
 
 const SAMPLE_SQL = 'SELECT id, email, full_name FROM users WHERE is_active = 1 ORDER BY id LIMIT 20;';
-const STEP_WHY: Record<number, string> = {
-  1: 'Choosing a mode sets the safest path to a working query. No-Docker is the fastest start.',
-  2: 'Connection setup confirms the app can reach your data source before any generation or execution.',
-  3: 'Schema refresh gives guardrails and Ask accurate table/column context.',
-  4: 'First query validates the full path: generation, policy checks, explain, and results.',
-};
 
 export default function QuickstartPage({
   password,
@@ -110,7 +104,6 @@ export default function QuickstartPage({
   const [dockerStatus, setDockerStatus] = useState<{ installed: boolean; daemonRunning: boolean; message?: string } | null>(null);
   const [dockerRunning, setDockerRunning] = useState(false);
   const [dockerPort, setDockerPort] = useState<number | null>(null);
-  const [showWhy, setShowWhy] = useState(false);
 
   const examplePrompts = useMemo(
     () => ['Show active users', 'Top spenders', 'Recent paid orders'],
@@ -396,7 +389,7 @@ export default function QuickstartPage({
         error: sqlResult.error,
       });
       setStatus('Sample SQL executed in Safe mode.');
-      setStep((prev) => Math.max(prev, 5));
+      setStep((prev) => Math.max(prev, 4));
     });
   };
 
@@ -421,7 +414,7 @@ export default function QuickstartPage({
         : (await api.askDryRun(prompt, 'safe', resolvePassword(), storedKey));
       setAskResult(result as AskResult);
       setStatus(execute ? 'Generated and executed in Safe mode.' : 'Generated in dry-run mode.');
-      setStep((prev) => Math.max(prev, 5));
+      setStep((prev) => Math.max(prev, 4));
       if (profileName) {
         await onReloadProfileState();
       }
@@ -442,444 +435,466 @@ export default function QuickstartPage({
       {error && <div className="inline-error preserve-lines">{error}</div>}
       {status && <div className="inline-success">{status}</div>}
 
-      <div className="card quickstart-stepper">
-        {[
-          'Choose setup mode',
-          'Connection details',
-          'Refresh schema',
-          'Run first query',
-        ].map((label, index) => {
-          const indexStep = index + 1;
-          return (
-            <button
-              key={label}
-              type="button"
-              className={step === indexStep ? 'step-pill active' : 'step-pill'}
-              onClick={() => setStep(indexStep)}
-            >
-              <span>{indexStep}</span>
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      <div className="quickstart-layout">
+        <aside className="card quickstart-stepper">
+          {[
+            'Choose setup mode',
+            'Connection details',
+            'Refresh schema',
+            'Run first query',
+          ].map((label, index) => {
+            const indexStep = index + 1;
+            return (
+              <button
+                key={label}
+                type="button"
+                className={step === indexStep ? 'step-pill active' : 'step-pill'}
+                onClick={() => setStep(indexStep)}
+              >
+                <span>{indexStep}</span>
+                {label}
+              </button>
+            );
+          })}
+        </aside>
 
-      {step === 1 && (
-        <div className="card quickstart-panel">
-          <div className="section-header">
-            <h3>Step 1: Choose setup mode</h3>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
-              Why this matters
-            </button>
-          </div>
-          {showWhy && <div className="inline-warning">{STEP_WHY[1]}</div>}
-          <p className="muted">Pick one mode now. You can switch any time from Setup.</p>
-          <div className="quickstart-mode-grid">
-            <button
-              type="button"
-              className={mode === 'no-docker' ? 'select-card active' : 'select-card'}
-              onClick={() => setMode('no-docker')}
-            >
-              <strong>Demo (No Docker) - recommended</strong>
-              <span>Built-in SQLite demo. Works immediately, even if Docker is missing.</span>
-            </button>
-            <button
-              type="button"
-              className={mode === 'docker' ? 'select-card active' : 'select-card'}
-              onClick={() => setMode('docker')}
-            >
-              <strong>Demo (Docker Postgres)</strong>
-              <span>Closer to production behavior with Postgres and EXPLAIN parity.</span>
-            </button>
-            <button
-              type="button"
-              className={mode === 'custom' ? 'select-card active' : 'select-card'}
-              onClick={() => setMode('custom')}
-            >
-              <strong>Connect my Postgres</strong>
-              <span>Use your own host, credentials, and SSL settings.</span>
-            </button>
-          </div>
-          <div className="action-row">
-            <button type="button" className="btn" onClick={() => setStep(2)}>
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="card quickstart-panel">
-          <div className="section-header">
-            <h3>Step 2: Connection details</h3>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
-              Why this matters
-            </button>
-          </div>
-          {showWhy && <div className="inline-warning">{STEP_WHY[2]}</div>}
-
-          {mode === 'no-docker' && (
-            <>
-              <div className="callout">
-                <strong>Local demo DB</strong>
-                <p>SQLite demo runs locally and does not require Docker.</p>
-                <p className="muted">Path: {demoNoDocker?.dbPath ?? 'Preparing...'}</p>
+        <div className="quickstart-step-body">
+          {step === 1 && (
+            <div className="card quickstart-panel">
+              <h3>Step 1: Choose setup mode</h3>
+              <p className="muted prose">Pick the fastest path to your first successful query.</p>
+              <div className="quickstart-mode-grid">
+                <button
+                  type="button"
+                  className={mode === 'no-docker' ? 'select-card active' : 'select-card'}
+                  onClick={() => setMode('no-docker')}
+                >
+                  <strong>Demo (No Docker) - recommended</strong>
+                  <span>Built-in SQLite demo. Works immediately.</span>
+                </button>
+                <button
+                  type="button"
+                  className={mode === 'docker' ? 'select-card active' : 'select-card'}
+                  onClick={() => setMode('docker')}
+                >
+                  <strong>Demo (Docker Postgres)</strong>
+                  <span>Closer to production behavior with Postgres.</span>
+                </button>
+                <button
+                  type="button"
+                  className={mode === 'custom' ? 'select-card active' : 'select-card'}
+                  onClick={() => setMode('custom')}
+                >
+                  <strong>Connect my Postgres</strong>
+                  <span>Use your own host and credentials.</span>
+                </button>
               </div>
               <div className="action-row">
+                <button type="button" className="btn" onClick={() => setStep(2)}>
+                  Continue
+                </button>
+              </div>
+              <details className="inspector-section">
+                <summary>Having trouble?</summary>
+                <div className="inspector-body">
+                  <p className="muted">If Docker is unavailable, choose Demo (No Docker) and continue.</p>
+                </div>
+              </details>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="card quickstart-panel">
+              <h3>Step 2: Connection details</h3>
+              <p className="muted prose">Set one connection path and confirm it works.</p>
+
+              {mode === 'no-docker' && (
+                <div className="stack">
+                  <div className="callout">
+                    <strong>Local demo DB</strong>
+                    <p>SQLite demo runs locally.</p>
+                    <p className="muted">Path: {demoNoDocker?.dbPath ?? 'Preparing...'}</p>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void handlePrepareNoDocker(false)}
+                      disabled={runningAction !== null}
+                    >
+                      {runningAction === 'prepare-no-docker' ? 'Preparing...' : 'Create demo profile'}
+                    </button>
+                    {connectionOk && <span className="badge">Ready</span>}
+                  </div>
+                  <details className="inspector-section">
+                    <summary>Having trouble?</summary>
+                    <div className="inspector-body">
+                      <p className="muted">Reset the local demo database if connection checks fail.</p>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => void handlePrepareNoDocker(true)}
+                        disabled={runningAction !== null}
+                      >
+                        {runningAction === 'prepare-no-docker-reset' ? 'Resetting...' : 'Reset demo DB'}
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {mode === 'docker' && (
+                <div className="stack">
+                  <div className="callout">
+                    <strong>Docker Postgres fixture</strong>
+                    <p>{dockerStatus?.message ?? 'Start the fixture from this step.'}</p>
+                    <p className="muted">
+                      Status: {dockerRunning ? `running on port ${dockerPort ?? 'unknown'}` : 'not running'}
+                    </p>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void handleDockerStart()}
+                      disabled={runningAction !== null}
+                    >
+                      {runningAction === 'docker-start' ? 'Starting...' : 'Start Docker demo'}
+                    </button>
+                    {dockerRunning && <span className="badge">Running</span>}
+                  </div>
+                  <details className="inspector-section">
+                    <summary>Having trouble?</summary>
+                    <div className="inspector-body">
+                      <p className="muted">If start fails, stop or reset the fixture and retry.</p>
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => void handleDockerStop()}
+                          disabled={runningAction !== null || !dockerRunning}
+                        >
+                          {runningAction === 'docker-stop' ? 'Stopping...' : 'Stop'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => void handleDockerReset()}
+                          disabled={runningAction !== null}
+                        >
+                          {runningAction === 'docker-reset' ? 'Resetting...' : 'Reset'}
+                        </button>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {mode === 'custom' && (
+                <div className="stack">
+                  <div className="form-grid quickstart-form-grid">
+                    <label>
+                      <span>Profile name</span>
+                      <input
+                        type="text"
+                        value={form.name}
+                        onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Host</span>
+                      <input
+                        type="text"
+                        value={form.host}
+                        onChange={(e) => setForm((prev) => ({ ...prev, host: e.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Port</span>
+                      <input
+                        type="number"
+                        value={form.port}
+                        onChange={(e) => setForm((prev) => ({ ...prev, port: e.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Database</span>
+                      <input
+                        type="text"
+                        value={form.database}
+                        onChange={(e) => setForm((prev) => ({ ...prev, database: e.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>User</span>
+                      <input
+                        type="text"
+                        value={form.user}
+                        onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Password</span>
+                      <input
+                        type="password"
+                        value={form.password}
+                        onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                        placeholder="Required for test and schema refresh"
+                      />
+                    </label>
+                    <label className="toggle-row compact">
+                      <input
+                        type="checkbox"
+                        checked={form.ssl}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ssl: e.target.checked }))}
+                      />
+                      <span>Use SSL</span>
+                    </label>
+                    <label className="toggle-row compact">
+                      <input
+                        type="checkbox"
+                        checked={form.saveInKeychain}
+                        onChange={(e) => setForm((prev) => ({ ...prev, saveInKeychain: e.target.checked }))}
+                      />
+                      <span>Save password in keychain</span>
+                    </label>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void handleTestConnection()}
+                      disabled={runningAction !== null}
+                    >
+                      {runningAction === 'test-connection' ? 'Testing...' : 'Save + test connection'}
+                    </button>
+                    {connectionOk === true && <span className="badge">Connected</span>}
+                    {connectionOk === false && <span className="badge badge-danger">Connection failed</span>}
+                  </div>
+                  <details className="inspector-section">
+                    <summary>Having trouble?</summary>
+                    <div className="inspector-body">
+                      <p className="muted">You can save without testing and continue later.</p>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => void handleSaveCustomProfile()}
+                        disabled={runningAction !== null}
+                      >
+                        {runningAction === 'save-custom-profile' ? 'Saving...' : 'Save profile only'}
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              <div className="action-row">
+                <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>
+                  Back
+                </button>
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => void handlePrepareNoDocker(false)}
-                  disabled={runningAction !== null}
+                  onClick={() => setStep(3)}
+                  disabled={!completion.connection}
                 >
-                  {runningAction === 'prepare-no-docker' ? 'Preparing...' : 'Create demo profile'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => void handlePrepareNoDocker(true)}
-                  disabled={runningAction !== null}
-                >
-                  {runningAction === 'prepare-no-docker-reset' ? 'Resetting...' : 'Reset demo DB'}
-                </button>
-                {connectionOk && <span className="badge">Ready</span>}
-              </div>
-            </>
-          )}
-
-          {mode === 'docker' && (
-            <>
-              <div className="callout">
-                <strong>Docker Postgres fixture</strong>
-                <p>{dockerStatus?.message ?? 'Use Start to launch demo Postgres from the app.'}</p>
-                <p className="muted">
-                  Status: {dockerRunning ? `running on port ${dockerPort ?? 'unknown'}` : 'not running'}
-                </p>
-              </div>
-              <div className="action-row">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void handleDockerStart()}
-                  disabled={runningAction !== null}
-                >
-                  {runningAction === 'docker-start' ? 'Starting...' : 'Start Docker demo'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => void handleDockerStop()}
-                  disabled={runningAction !== null || !dockerRunning}
-                >
-                  {runningAction === 'docker-stop' ? 'Stopping...' : 'Stop'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => void handleDockerReset()}
-                  disabled={runningAction !== null}
-                >
-                  {runningAction === 'docker-reset' ? 'Resetting...' : 'Reset'}
-                </button>
-              </div>
-            </>
-          )}
-
-          {mode === 'custom' && (
-            <>
-              <div className="form-grid quickstart-form-grid">
-                <label>
-                  <span>Profile name</span>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>Host</span>
-                  <input
-                    type="text"
-                    value={form.host}
-                    onChange={(e) => setForm((prev) => ({ ...prev, host: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>Port</span>
-                  <input
-                    type="number"
-                    value={form.port}
-                    onChange={(e) => setForm((prev) => ({ ...prev, port: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>Database</span>
-                  <input
-                    type="text"
-                    value={form.database}
-                    onChange={(e) => setForm((prev) => ({ ...prev, database: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>User</span>
-                  <input
-                    type="text"
-                    value={form.user}
-                    onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>Password</span>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                    placeholder="Required for test and schema refresh"
-                  />
-                </label>
-                <label className="toggle-row compact">
-                  <input
-                    type="checkbox"
-                    checked={form.ssl}
-                    onChange={(e) => setForm((prev) => ({ ...prev, ssl: e.target.checked }))}
-                  />
-                  <span>Use SSL</span>
-                </label>
-                <label className="toggle-row compact">
-                  <input
-                    type="checkbox"
-                    checked={form.saveInKeychain}
-                    onChange={(e) => setForm((prev) => ({ ...prev, saveInKeychain: e.target.checked }))}
-                  />
-                  <span>Save password in keychain</span>
-                </label>
-              </div>
-              <div className="action-row">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => void handleSaveCustomProfile()}
-                  disabled={runningAction !== null}
-                >
-                  {runningAction === 'save-custom-profile' ? 'Saving...' : 'Save profile'}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void handleTestConnection()}
-                  disabled={runningAction !== null}
-                >
-                  {runningAction === 'test-connection' ? 'Testing...' : 'Test connection'}
-                </button>
-                {connectionOk === true && <span className="badge">Connected</span>}
-                {connectionOk === false && <span className="badge badge-danger">Connection failed</span>}
-              </div>
-            </>
-          )}
-
-          <div className="action-row">
-            <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setStep(3)}
-              disabled={!completion.connection}
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="card quickstart-panel">
-          <div className="section-header">
-            <h3>Step 3: Refresh schema</h3>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
-              Why this matters
-            </button>
-          </div>
-          {showWhy && <div className="inline-warning">{STEP_WHY[3]}</div>}
-          <p className="muted">
-            Refresh powers schema explorer, guardrails, and Ask generation.
-            {mode === 'no-docker' && ' SQLite demo mode uses simplified EXPLAIN output.'}
-          </p>
-          <div className="action-row">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void handleRefreshSchema()}
-              disabled={runningAction !== null}
-            >
-              {runningAction === 'refresh-schema' ? 'Refreshing...' : 'Refresh schema'}
-            </button>
-            {schemaRefreshedAt && (
-              <span className="badge">Last refresh: {schemaRefreshedAt}</span>
-            )}
-          </div>
-          <div className="action-row">
-            <button type="button" className="btn btn-secondary" onClick={() => setStep(2)}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setStep(4)}
-              disabled={!completion.schema}
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="card quickstart-panel">
-          <div className="section-header">
-            <h3>Step 4: Run first query</h3>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
-              Why this matters
-            </button>
-          </div>
-          {showWhy && <div className="inline-warning">{STEP_WHY[4]}</div>}
-          <p className="muted">Run Ask with OpenAI, or run the SQL sample without OpenAI.</p>
-          {openAiKeyMissing && (
-            <div className="callout">
-              <strong>No OpenAI API key set.</strong>
-              <p>Ask is disabled until a key is saved. SQL sample still runs now.</p>
-              <div className="action-row">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => onNavigate('settings')}>
-                  Go to Settings
+                  Continue
                 </button>
               </div>
             </div>
           )}
-          {checkingOpenAiKey && <p className="muted">Checking AI key status...</p>}
-          <textarea
-            rows={4}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-          <div className="chip-row">
-            {examplePrompts.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                className="chip-btn"
-                onClick={() => setPrompt(chip)}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-          <div className="action-row">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void handleRunFirstQuery(false)}
-              disabled={runningAction !== null || !hasOpenAiKey || checkingOpenAiKey}
-            >
-              {runningAction === 'ask-dry-run' ? 'Generating...' : 'Generate (dry-run)'}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void handleRunFirstQuery(true)}
-              disabled={runningAction !== null || !hasOpenAiKey || checkingOpenAiKey}
-            >
-              {runningAction === 'ask-run' ? 'Running...' : 'Generate + Run (safe)'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void handleRunSqlSample()}
-              disabled={runningAction !== null}
-            >
-              {runningAction === 'run-sql-sample' ? 'Running SQL...' : 'Run SQL sample'}
-            </button>
-          </div>
 
-          {askResult && (
-            <div className="quickstart-results-grid">
-              <div className="panel">
-                <h4>Generated SQL</h4>
-                <pre><code>{askResult.plan?.sql || 'No SQL generated.'}</code></pre>
-              </div>
-              <div className="panel">
-                <h4>Policy decision</h4>
-                <p><strong>Status:</strong> {askResult.status}</p>
-                <p><strong>Allowed:</strong> {askResult.validation?.allowed === false ? 'No' : 'Yes'}</p>
-                {askResult.validation?.reason && <p className="text-err">{askResult.validation.reason}</p>}
-                {(askResult.validation?.warnings ?? []).map((warning) => (
-                  <p key={warning} className="warning">{warning}</p>
-                ))}
-              </div>
-              <div className="panel">
-                <h4>Explain summary</h4>
-                <p><strong>Estimated rows:</strong> {askResult.explainSummary?.estimatedRows ?? '-'}</p>
-                <p><strong>Estimated cost:</strong> {askResult.explainSummary?.estimatedCost ?? '-'}</p>
-                <p><strong>Seq scan:</strong> {askResult.explainSummary?.hasSeqScan ? 'yes' : 'no'}</p>
-              </div>
-              <div className="panel">
-                <h4>Results</h4>
-                {!askResult.executionResult && <p className="muted">No execution rows for this action.</p>}
-                {askResult.executionResult && renderedColumns.length > 0 && (
-                  <div className="table-wrapper">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          {renderedColumns.map((column) => (
-                            <th key={column}>{column}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {renderedRows.map((row, idx) => (
-                          <tr key={idx}>
-                            {renderedColumns.map((column) => (
-                              <td key={column}>{String(row[column] ?? '')}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+          {step === 3 && (
+            <div className="card quickstart-panel">
+              <h3>Step 3: Refresh schema</h3>
+              <p className="muted prose">Refresh schema so Ask, policy checks, and explorer stay accurate.</p>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void handleRefreshSchema()}
+                  disabled={runningAction !== null}
+                >
+                  {runningAction === 'refresh-schema' ? 'Refreshing...' : 'Refresh schema'}
+                </button>
+                {schemaRefreshedAt && (
+                  <span className="badge">Refreshed</span>
                 )}
               </div>
-            </div>
-          )}
-
-          <div className="action-row">
-            <button type="button" className="btn btn-secondary" onClick={() => setStep(3)}>
-              Back
-            </button>
-            <button type="button" className="btn" onClick={() => onNavigate('workspace')} disabled={!completion.firstQuery}>
-              Go to Workspace
-            </button>
-          </div>
-          {completion.firstQuery && (
-            <div className="card quickstart-done">
-              <h4>Setup complete</h4>
-              <ul className="checklist">
-                <li>Mode configured</li>
-                <li>Connection ready</li>
-                <li>Schema refreshed</li>
-                <li>First query completed</li>
-              </ul>
+              {schemaRefreshedAt && (
+                <p className="muted">Last refresh: {schemaRefreshedAt}</p>
+              )}
+              <details className="inspector-section">
+                <summary>Having trouble?</summary>
+                <div className="inspector-body">
+                  <p className="muted">If refresh fails, re-test connection in Step 2 and retry.</p>
+                </div>
+              </details>
               <div className="action-row">
-                <button type="button" className="btn btn-secondary" onClick={() => onNavigate('history')}>
-                  View History
+                <button type="button" className="btn btn-secondary" onClick={() => setStep(2)}>
+                  Back
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => onNavigate('settings')}>
-                  Open Settings
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setStep(4)}
+                  disabled={!completion.schema}
+                >
+                  Continue
                 </button>
               </div>
             </div>
           )}
+
+          {step === 4 && (
+            <div className="card quickstart-panel">
+              <h3>Step 4: Run first query</h3>
+              <p className="muted prose">Run one safe query and confirm results appear.</p>
+              {openAiKeyMissing && (
+                <div className="callout">
+                  <strong>No OpenAI API key set.</strong>
+                  <p>Ask is disabled until a key is saved. You can still run SQL sample now.</p>
+                </div>
+              )}
+              {checkingOpenAiKey && <p className="muted">Checking AI key status...</p>}
+              <textarea
+                rows={4}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+              />
+              <div className="chip-row">
+                {examplePrompts.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    className="chip-btn"
+                    onClick={() => setPrompt(chip)}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+              <div className="action-row">
+                {hasOpenAiKey && !checkingOpenAiKey ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => void handleRunFirstQuery(true)}
+                    disabled={runningAction !== null}
+                  >
+                    {runningAction === 'ask-run' ? 'Running...' : 'Generate + Run (safe)'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => void handleRunSqlSample()}
+                    disabled={runningAction !== null}
+                  >
+                    {runningAction === 'run-sql-sample' ? 'Running SQL...' : 'Run SQL sample'}
+                  </button>
+                )}
+              </div>
+              <details className="inspector-section">
+                <summary>Having trouble?</summary>
+                <div className="inspector-body">
+                  <div className="action-row">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => onNavigate('settings')}>
+                      Open Settings
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void handleRunFirstQuery(false)}
+                      disabled={runningAction !== null || !hasOpenAiKey || checkingOpenAiKey}
+                    >
+                      {runningAction === 'ask-dry-run' ? 'Generating...' : 'Generate (dry run)'}
+                    </button>
+                  </div>
+                </div>
+              </details>
+
+              {askResult && (
+                <details className="inspector-section" open>
+                  <summary>Preview output</summary>
+                  <div className="quickstart-results-grid">
+                    <div className="panel">
+                      <h4>Generated SQL</h4>
+                      <pre><code>{askResult.plan?.sql || 'No SQL generated.'}</code></pre>
+                    </div>
+                    <div className="panel">
+                      <h4>Policy</h4>
+                      <p><strong>Status:</strong> {askResult.status}</p>
+                      <p><strong>Allowed:</strong> {askResult.validation?.allowed === false ? 'No' : 'Yes'}</p>
+                      {askResult.validation?.reason && <p className="text-err">{askResult.validation.reason}</p>}
+                    </div>
+                    <div className="panel">
+                      <h4>Explain</h4>
+                      <p><strong>Estimated rows:</strong> {askResult.explainSummary?.estimatedRows ?? '-'}</p>
+                      <p><strong>Estimated cost:</strong> {askResult.explainSummary?.estimatedCost ?? '-'}</p>
+                      <p><strong>Seq scan:</strong> {askResult.explainSummary?.hasSeqScan ? 'yes' : 'no'}</p>
+                    </div>
+                    <div className="panel">
+                      <h4>Results</h4>
+                      {!askResult.executionResult && <p className="muted">No execution rows for this action.</p>}
+                      {askResult.executionResult && renderedColumns.length > 0 && (
+                        <div className="table-wrapper">
+                          <table className="data-table">
+                            <thead>
+                              <tr>
+                                {renderedColumns.map((column) => (
+                                  <th key={column}>{column}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {renderedRows.map((row, idx) => (
+                                <tr key={idx}>
+                                  {renderedColumns.map((column) => (
+                                    <td key={column}>{String(row[column] ?? '')}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </details>
+              )}
+
+              <div className="action-row">
+                <button type="button" className="btn btn-secondary" onClick={() => setStep(3)}>
+                  Back
+                </button>
+                <button type="button" className="btn" onClick={() => onNavigate('workspace')} disabled={!completion.firstQuery}>
+                  Go to Workspace
+                </button>
+              </div>
+              {completion.firstQuery && (
+                <div className="card quickstart-done">
+                  <h4>Setup complete</h4>
+                  <ul className="checklist">
+                    <li>Mode configured</li>
+                    <li>Connection ready</li>
+                    <li>Schema refreshed</li>
+                    <li>First query completed</li>
+                  </ul>
+                  <div className="action-row">
+                    <button type="button" className="btn btn-secondary" onClick={() => onNavigate('history')}>
+                      View History
+                    </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => onNavigate('settings')}>
+                      Open Settings
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </section>
   );
 }

@@ -436,8 +436,13 @@ export default function WorkspacePage({
   const enforcedLimitWarning =
     result?.validation?.warnings?.some((w: string) => w.toLowerCase().includes('limit'));
   const hasSchemaTables = Array.isArray(schemaSnapshot?.tables) && schemaSnapshot.tables.length > 0;
+  const isBlocked = result?.status === 'blocked' || result?.validation?.allowed === false;
+  const summaryReason =
+    result?.validation?.reason ||
+    result?.error ||
+    (result ? 'Query evaluated. Review policy and SQL details below.' : 'Run a query to see policy and execution summary.');
   const policyFixSuggestion =
-    result?.status === 'blocked'
+    isBlocked
       ? selectStarWarning
         ? 'Fix it: list explicit columns instead of SELECT *.'
         : enforcedLimitWarning
@@ -516,7 +521,7 @@ export default function WorkspacePage({
       <div className="workspace-header">
         <div>
           <h2>Workspace</h2>
-          <p className="muted">Ask in natural language or run SQL directly with policy and explain guardrails.</p>
+          <p className="muted prose">Ask in natural language or run SQL directly with policy and explain guardrails.</p>
         </div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowHelp(true)}>
           Help
@@ -620,11 +625,19 @@ export default function WorkspacePage({
                   </button>
                 ))}
               </div>
+              <details className="inspector-section">
+                <summary>Advanced</summary>
+                <div className="inspector-body">
+                  <label className="stack-sm">
+                    <span className="muted">Mode</span>
+                    <select value={askMode} onChange={(e) => setAskMode(e.target.value as 'safe' | 'standard')}>
+                      <option value="safe">Safe mode</option>
+                      <option value="standard">Power mode</option>
+                    </select>
+                  </label>
+                </div>
+              </details>
               <div className="action-row">
-                <select value={askMode} onChange={(e) => setAskMode(e.target.value as 'safe' | 'standard')}>
-                  <option value="safe">Safe mode</option>
-                  <option value="standard">Power mode</option>
-                </select>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -651,11 +664,19 @@ export default function WorkspacePage({
                 placeholder="SELECT id, email FROM users WHERE is_active = true LIMIT 50;"
                 onChange={(e) => setSqlText(e.target.value)}
               />
+              <details className="inspector-section">
+                <summary>Advanced</summary>
+                <div className="inspector-body">
+                  <label className="stack-sm">
+                    <span className="muted">Mode</span>
+                    <select value={sqlMode} onChange={(e) => setSqlMode(e.target.value as 'safe' | 'standard')}>
+                      <option value="safe">Safe mode</option>
+                      <option value="standard">Power mode</option>
+                    </select>
+                  </label>
+                </div>
+              </details>
               <div className="action-row">
-                <select value={sqlMode} onChange={(e) => setSqlMode(e.target.value as 'safe' | 'standard')}>
-                  <option value="safe">Safe mode</option>
-                  <option value="standard">Power mode</option>
-                </select>
                 <button type="button" className="btn" onClick={() => runSqlAction('run')} disabled={running}>
                   Run
                 </button>
@@ -675,6 +696,59 @@ export default function WorkspacePage({
 
         <aside className="panel workspace-right">
           <details className="inspector-section" open>
+            <summary>Summary</summary>
+            <div className="inspector-body">
+              <div className="action-row">
+                <span className={`status-pill ${isBlocked ? 'status-error' : 'status-ok'}`}>
+                  {result ? (isBlocked ? 'Blocked' : 'Allowed') : 'Idle'}
+                </span>
+                <span className="status-pill">
+                  {result?.classification?.classification ?? 'n/a'}
+                </span>
+              </div>
+              <p className="prose">{summaryReason}</p>
+              <div className="metric-grid">
+                <div className="metric-pill">
+                  <span className="subtle">Explain Cost</span>
+                  <strong>{result?.explainSummary?.estimatedCost ?? '-'}</strong>
+                </div>
+                <div className="metric-pill">
+                  <span className="subtle">Est Rows</span>
+                  <strong>{result?.explainSummary?.estimatedRows ?? '-'}</strong>
+                </div>
+                <div className="metric-pill">
+                  <span className="subtle">Exec ms</span>
+                  <strong>{result?.executionResult?.execMs ?? '-'}</strong>
+                </div>
+                <div className="metric-pill">
+                  <span className="subtle">Rows</span>
+                  <strong>{result?.executionResult?.rowCount ?? '-'}</strong>
+                </div>
+              </div>
+              {policyFixSuggestion && (
+                <div className="stack-sm">
+                  <p className="warning"><strong>How to fix:</strong> {policyFixSuggestion}</p>
+                  <ul className="checklist">
+                    <li>Tighten filters and add LIMIT.</li>
+                    <li>Select explicit columns instead of wildcard output.</li>
+                    <li>Use write preview if you need POWER mode changes.</li>
+                  </ul>
+                  <div className="action-row">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab('sql')}>
+                      Edit SQL
+                    </button>
+                    {tab === 'ask' && (
+                      <button type="button" className="btn btn-sm" onClick={() => void runAsk(false)} disabled={running || !hasOpenAiKey}>
+                        Regenerate with constraints
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </details>
+
+          <details className="inspector-section">
             <summary>SQL</summary>
             {result?.sql ? (
               <div className="inspector-body">
@@ -690,29 +764,15 @@ export default function WorkspacePage({
             )}
           </details>
 
-          <details className="inspector-section" open>
-            <summary>Policy decision</summary>
+          <details className="inspector-section">
+            <summary>Policy</summary>
             <div className="inspector-body">
               <p><strong>Status:</strong> {result?.status ?? 'idle'}</p>
               <p><strong>Classification:</strong> {result?.classification?.classification ?? 'n/a'}</p>
-              {result?.validation?.reason && (
-                <p className="text-err">Reason: {result.validation.reason}</p>
-              )}
-              {policyFixSuggestion && <p className="warning">{policyFixSuggestion}</p>}
-            </div>
-          </details>
-
-          <details className="inspector-section" open>
-            <summary>Explain summary</summary>
-            <div className="inspector-body">
-              {result?.explainSummary ? (
-                <>
-                  <p><strong>Estimated rows:</strong> {result.explainSummary.estimatedRows}</p>
-                  <p><strong>Estimated cost:</strong> {result.explainSummary.estimatedCost}</p>
-                  <p><strong>Seq scan:</strong> {result.explainSummary.hasSeqScan ? 'yes' : 'no'}</p>
-                </>
+              {result?.validation?.reason ? (
+                <p className="text-err">{result.validation.reason}</p>
               ) : (
-                <p className="muted">No explain summary yet.</p>
+                <p className="muted">No policy warnings.</p>
               )}
               {(result?.explainWarnings ?? []).map((warning) => (
                 <p key={warning} className="warning">{warning}</p>
@@ -720,10 +780,15 @@ export default function WorkspacePage({
               {(result?.explainBlockers ?? []).map((blocker) => (
                 <p key={blocker} className="text-err">{blocker}</p>
               ))}
+              <details>
+                <summary>Details</summary>
+                <pre><code>{JSON.stringify(result?.validation ?? {}, null, 2)}</code></pre>
+              </details>
             </div>
           </details>
 
-          <details className="inspector-section" open>
+          {!isBlocked && (
+          <details className="inspector-section" open={Boolean(result?.executionResult)}>
             <summary>Results</summary>
             <div className="inspector-body">
               <div className="action-row">
@@ -775,16 +840,7 @@ export default function WorkspacePage({
               )}
             </div>
           </details>
-
-          <details className="inspector-section">
-            <summary>Execution metadata</summary>
-            <div className="inspector-body">
-              <p><strong>Source:</strong> {result?.source ?? 'n/a'}</p>
-              <p><strong>Model:</strong> {result?.model ?? 'n/a'}</p>
-              <p><strong>Confidence:</strong> {typeof result?.confidence === 'number' ? `${Math.round(result.confidence * 100)}%` : 'n/a'}</p>
-              <p><strong>Rows:</strong> {result?.executionResult?.rowCount ?? 0}</p>
-            </div>
-          </details>
+          )}
         </aside>
       </div>
 
