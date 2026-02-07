@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:tauri": "bash ../../scripts/desktop-dev.sh",
     "build": "tsc -b && vite build",
     "build:bridge": "tsc -p bridge/tsconfig.json",
     "build:bundle": "pnpm run build && pnpm run build:bridge && pnpm tauri build",
