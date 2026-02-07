@@ -41,6 +41,13 @@ nvm use 20
 node -v
 ```
 
+If `nvm` is unavailable, run at least one Node 20 command path with:
+
+```bash
+npx -y node@20 -v
+npx -y node@20 apps/cli/dist/main.js --help
+```
+
 Recommended pnpm major:
 
 ```bash

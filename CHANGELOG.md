@@ -79,3 +79,13 @@
   - port conflict override
   - Docker startup fallback
   - no-OpenAI-key offline demo path
+
+### Final Verification Pass
+
+- Verified full acceptance matrix with Docker daemon running:
+  - workspace install/build/test/lint/typecheck
+  - docker fixture smoke and core integration tests on `OPENQUERY_PG_PORT=55432`
+  - deterministic CLI dist execution
+  - desktop `tauri build --no-bundle`
+- Removed obsolete compose `version` field from `infra/docker/docker-compose.yml` to eliminate warnings.
+- Added Node 20 fallback verification path (`npx -y node@20`) in `docs/dev-setup.md`.
