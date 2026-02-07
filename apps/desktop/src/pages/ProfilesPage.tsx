@@ -239,7 +239,7 @@ export default function ProfilesPage({
     <section className="page-stack">
       <header className="page-header">
         <h2>Profiles</h2>
-        <p>Create and validate database connections before running queries.</p>
+        <p className="prose">Create and validate database connections before running queries.</p>
       </header>
 
       {error && <div className="inline-error preserve-lines">{error}</div>}
@@ -248,14 +248,23 @@ export default function ProfilesPage({
       {profiles.length === 0 ? (
         <div className="empty-card">
           <h3>No profiles yet</h3>
-          <p>Add a PostgreSQL profile to start schema exploration and query generation.</p>
+          <p className="prose">Add a PostgreSQL profile to start schema exploration and query generation.</p>
           <button type="button" className="btn" onClick={() => setShowAdd(true)}>
             Create Profile
           </button>
         </div>
       ) : (
-        <div className="card">
-          <table className="data-table">
+        <div className="card stack">
+          <div className="section-header">
+            <div className="stack-sm">
+              <h3>Saved Profiles</h3>
+              <p className="muted">Set one as active, test connectivity, and refresh schema.</p>
+            </div>
+            <button type="button" className="btn" onClick={() => setShowAdd(true)}>
+              Add Profile
+            </button>
+          </div>
+          <table className="data-table profile-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -275,7 +284,7 @@ export default function ProfilesPage({
                   <td>{p.host}:{p.port}</td>
                   <td>{p.database}</td>
                   <td>{p.user}</td>
-                  <td className="actions">
+                  <td className="profile-actions">
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -316,42 +325,57 @@ export default function ProfilesPage({
       )}
 
       {activeProfile && powerByName[activeProfile] && (
-        <div className="card">
-          <h3>POWER Mode</h3>
-          <p className="muted">
-            Write operations require preview plus typed confirmation. Keep this disabled unless needed.
-          </p>
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={powerByName[activeProfile].allowWrite}
-              onChange={(e) => handleTogglePower(activeProfile, 'allowWrite', e.target.checked)}
-            />
-            <span>Enable write operations</span>
-          </label>
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={powerByName[activeProfile].allowDangerous}
-              disabled={!powerByName[activeProfile].allowWrite}
-              onChange={(e) => handleTogglePower(activeProfile, 'allowDangerous', e.target.checked)}
-            />
-            <span>Allow dangerous operations (DROP/TRUNCATE)</span>
-          </label>
+        <div className="section">
+          <div className="section-header">
+            <div className="stack-sm">
+              <h3>POWER Mode</h3>
+              <p className="muted prose">Write operations require preview plus typed confirmation.</p>
+            </div>
+          </div>
+          <div className="card stack">
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={powerByName[activeProfile].allowWrite}
+                onChange={(e) => handleTogglePower(activeProfile, 'allowWrite', e.target.checked)}
+              />
+              <span>Enable write operations</span>
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={powerByName[activeProfile].allowDangerous}
+                disabled={!powerByName[activeProfile].allowWrite}
+                onChange={(e) => handleTogglePower(activeProfile, 'allowDangerous', e.target.checked)}
+              />
+              <span>Allow dangerous operations (DROP/TRUNCATE)</span>
+            </label>
+          </div>
         </div>
       )}
 
-      <div className="card">
-        <div className="section-header">
-          <h3>{showAdd ? 'New Profile' : 'Onboarding'}</h3>
-          {!showAdd && (
+      {!showAdd && (
+        <div className="card stack-sm">
+          <h3>Profile Onboarding</h3>
+          <p className="muted prose">Create a profile, test connection, then refresh schema snapshot.</p>
+          <div className="action-row">
             <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(true)}>
-              Add Profile
+              New Profile
             </button>
-          )}
+          </div>
         </div>
-        {showAdd && (
-          <div className="form-grid">
+      )}
+
+      {showAdd && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <div className="section-header">
+              <div className="stack-sm">
+                <h3>New Profile</h3>
+                <p className="muted prose">Enter connection basics first, then open advanced options if needed.</p>
+              </div>
+            </div>
+            <div className="form-grid quickstart-form-grid">
             <label>
               <span>Name</span>
               <input
@@ -392,22 +416,28 @@ export default function ProfilesPage({
                 onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
               />
             </label>
-            <label className="toggle-row compact">
-              <input
-                type="checkbox"
-                checked={form.ssl}
-                onChange={(e) => setForm((prev) => ({ ...prev, ssl: e.target.checked }))}
-              />
-              <span>Use SSL</span>
-            </label>
-            <label className="toggle-row compact">
-              <input
-                type="checkbox"
-                checked={rememberPw}
-                onChange={(e) => setRememberPw(e.target.checked)}
-              />
-              <span>Save session password in keychain</span>
-            </label>
+            </div>
+            <details className="inspector-section">
+              <summary>Advanced</summary>
+              <div className="inspector-body">
+                <label className="toggle-row compact">
+                  <input
+                    type="checkbox"
+                    checked={form.ssl}
+                    onChange={(e) => setForm((prev) => ({ ...prev, ssl: e.target.checked }))}
+                  />
+                  <span>Use SSL</span>
+                </label>
+                <label className="toggle-row compact">
+                  <input
+                    type="checkbox"
+                    checked={rememberPw}
+                    onChange={(e) => setRememberPw(e.target.checked)}
+                  />
+                  <span>Save session password in keychain</span>
+                </label>
+              </div>
+            </details>
             <div className="action-row">
               <button type="button" className="btn" onClick={handleAdd}>
                 Save Profile
@@ -417,8 +447,8 @@ export default function ProfilesPage({
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -43,6 +43,7 @@ function classifySql(sql: string): 'read' | 'write' | 'dangerous' {
 export default function HistoryPage({ onOpenWorkspace }: Props) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [selected, setSelected] = useState<HistoryItem | null>(null);
+  const [detailTab, setDetailTab] = useState<'overview' | 'sql' | 'policy' | 'results'>('overview');
   const [search, setSearch] = useState('');
   const [profileFilter, setProfileFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'read' | 'write' | 'dangerous'>('all');
@@ -134,6 +135,12 @@ export default function HistoryPage({ onOpenWorkspace }: Props) {
     }
   };
 
+  const selectedPolicy = selected?.detail?.run?.validation || selected?.detail?.generation?.validation || selected?.detail?.validation;
+  const selectedExplain = selected?.detail?.run?.explainSummary || selected?.detail?.generation?.explainSummary;
+  const selectedExecution = selected?.detail?.run?.executionResult || selected?.detail?.run?.result || null;
+  const selectedColumns: string[] = Array.isArray(selectedExecution?.columns) ? selectedExecution.columns : [];
+  const selectedRows: Array<Record<string, unknown>> = Array.isArray(selectedExecution?.rows) ? selectedExecution.rows : [];
+
   return (
     <section className="page-stack">
       <header className="page-header">
@@ -178,43 +185,40 @@ export default function HistoryPage({ onOpenWorkspace }: Props) {
         {filtered.length === 0 ? (
           <p className="muted">No history matches your filters.</p>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Question</th>
-                <th>Profile</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Rows</th>
-                <th>ms</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => (
-                <tr
-                  key={item.id}
-                  className={selected?.id === item.id ? 'row-active clickable' : 'clickable'}
-                  onClick={() => setSelected(item)}
-                >
-                  <td>{item.question.length > 70 ? `${item.question.slice(0, 67)}...` : item.question}</td>
-                  <td>{item.profileName}</td>
-                  <td>{item.statementType}</td>
-                  <td>{item.status ?? '-'}</td>
-                  <td>{item.rowCount ?? '-'}</td>
-                  <td>{item.execMs ?? '-'}</td>
-                  <td>{item.askedAt}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="history-list">
+            {filtered.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={selected?.id === item.id ? 'history-row active' : 'history-row'}
+                onClick={() => {
+                  setSelected(item);
+                  setDetailTab('overview');
+                }}
+              >
+                <div className="history-row__title">
+                  {item.question.length > 96 ? `${item.question.slice(0, 93)}...` : item.question}
+                </div>
+                <div className="history-row__meta muted">
+                  {item.profileName} | {item.askedAt} | {item.rowCount ?? '-'} rows | {item.execMs ?? '-'} ms
+                </div>
+                <div className="history-row__tags">
+                  <span className="badge">{item.statementType}</span>
+                  <span className="badge">{item.status ?? 'unknown'}</span>
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
       {selected && (
         <div className="card">
           <div className="section-header">
-            <h3>Selected Entry</h3>
+            <div className="stack-sm">
+              <h3>Selected Entry</h3>
+              <p className="muted prose">Review summary first, then open SQL, policy, or result details.</p>
+            </div>
             <div className="action-row">
               <button
                 type="button"
@@ -233,10 +237,91 @@ export default function HistoryPage({ onOpenWorkspace }: Props) {
               </button>
             </div>
           </div>
-          <p><strong>Question:</strong> {selected.question}</p>
-          <p><strong>Profile:</strong> {selected.profileName}</p>
-          <p><strong>Statement Type:</strong> {selected.statementType}</p>
-          <pre><code>{selected.sqlPreview || 'No SQL available'}</code></pre>
+          <div className="tab-row">
+            <button type="button" className={detailTab === 'overview' ? 'tab active' : 'tab'} onClick={() => setDetailTab('overview')}>
+              Overview
+            </button>
+            <button type="button" className={detailTab === 'sql' ? 'tab active' : 'tab'} onClick={() => setDetailTab('sql')}>
+              SQL
+            </button>
+            <button type="button" className={detailTab === 'policy' ? 'tab active' : 'tab'} onClick={() => setDetailTab('policy')}>
+              Policy
+            </button>
+            <button type="button" className={detailTab === 'results' ? 'tab active' : 'tab'} onClick={() => setDetailTab('results')}>
+              Results
+            </button>
+          </div>
+
+          {detailTab === 'overview' && (
+            <div className="stack">
+              <p><strong>Question:</strong> {selected.question}</p>
+              <p><strong>Profile:</strong> {selected.profileName}</p>
+              <p><strong>Type:</strong> {selected.statementType}</p>
+              <p><strong>Status:</strong> {selected.status ?? 'unknown'}</p>
+            </div>
+          )}
+
+          {detailTab === 'sql' && (
+            <div className="stack-sm">
+              <p className="muted">Generated or rewritten SQL for this entry.</p>
+              <pre><code>{selected.sqlPreview || 'No SQL available'}</code></pre>
+            </div>
+          )}
+
+          {detailTab === 'policy' && (
+            <div className="stack-sm">
+              {!selectedPolicy && <p className="muted">No policy detail captured for this entry.</p>}
+              {selectedPolicy && (
+                <>
+                  <p><strong>Allowed:</strong> {selectedPolicy.allowed === false ? 'No' : 'Yes'}</p>
+                  {selectedPolicy.reason && <p className="text-err">{String(selectedPolicy.reason)}</p>}
+                  {Array.isArray(selectedPolicy.warnings) && selectedPolicy.warnings.map((warning: string) => (
+                    <p key={warning} className="warning">{warning}</p>
+                  ))}
+                </>
+              )}
+              <details className="inspector-section">
+                <summary>Details</summary>
+                <pre><code>{JSON.stringify({ policy: selectedPolicy ?? null, explain: selectedExplain ?? null }, null, 2)}</code></pre>
+              </details>
+            </div>
+          )}
+
+          {detailTab === 'results' && (
+            <div className="stack-sm">
+              {!selectedExecution && <p className="muted">No execution result captured for this entry.</p>}
+              {selectedExecution && (
+                <>
+                  <p className="muted">
+                    {selectedExecution.rowCount ?? selectedRows.length} rows
+                    {typeof selectedExecution.execMs === 'number' ? ` in ${selectedExecution.execMs}ms` : ''}
+                  </p>
+                  {selectedColumns.length > 0 && (
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            {selectedColumns.map((col) => (
+                              <th key={col}>{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedRows.slice(0, 40).map((row, idx) => (
+                            <tr key={idx}>
+                              {selectedColumns.map((col) => (
+                                <td key={col}>{row[col] == null ? <span className="muted">NULL</span> : String(row[col])}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>
