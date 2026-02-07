@@ -10,15 +10,15 @@
   --radius-md: 12px;
   --radius-lg: 18px;
 
-  --bg: #f3f6f4;
-  --bg-soft: #e6eeea;
+  --bg: #edf0f5;
+  --bg-soft: #e2e7ef;
   --surface: #ffffff;
-  --surface-2: #f7faf8;
-  --border: #d5e2db;
-  --ink: #152b23;
-  --ink-muted: #5d786c;
-  --accent: #0f7a52;
-  --accent-2: #d98f1c;
+  --surface-2: #f6f8fb;
+  --border: #d2d8e3;
+  --ink: #232631;
+  --ink-muted: #5e6574;
+  --accent: #2d2c35;
+  --accent-2: #7a8193;
   --danger: #c03a2b;
   --warning: #9a6a08;
   --success: #1d7d46;
@@ -34,8 +34,8 @@ body {
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(180% 120% at 0% 0%, #e4efe9 0%, transparent 55%),
-    radial-gradient(120% 100% at 100% 0%, #f4ebd9 0%, transparent 45%),
+    radial-gradient(180% 120% at 0% 0%, #e3e8f2 0%, transparent 55%),
+    radial-gradient(120% 100% at 100% 0%, #f3f5f8 0%, transparent 45%),
     var(--bg);
 }
 
@@ -73,7 +73,7 @@ select {
 textarea:focus,
 input:focus,
 select:focus {
-  outline: 2px solid rgba(15, 122, 82, 0.2);
+  outline: 2px solid rgba(45, 44, 53, 0.2);
   border-color: var(--accent);
 }
 
@@ -85,7 +85,7 @@ select:focus {
 
 .side-nav {
   border-right: 1px solid var(--border);
-  background: linear-gradient(160deg, #f9fcfb 0%, #eef5f1 100%);
+  background: linear-gradient(160deg, #f8f9fc 0%, #edf1f7 100%);
   padding: var(--space-5);
   display: flex;
   flex-direction: column;
@@ -94,19 +94,19 @@ select:focus {
 
 .brand-mark {
   display: grid;
-  grid-template-columns: 52px 1fr;
+  grid-template-columns: 56px 1fr;
   gap: var(--space-3);
   align-items: center;
 }
 
 .brand-mark__logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   object-fit: contain;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 4px;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .brand-mark h1 {
@@ -141,8 +141,8 @@ select:focus {
 }
 
 .nav-btn.active {
-  background: #eaf5ef;
-  border-color: #b9d9cb;
+  background: #eceff6;
+  border-color: #c6cedd;
   color: var(--accent);
   font-weight: 600;
 }
@@ -213,8 +213,8 @@ select:focus {
 
 .mode-safe {
   color: var(--accent);
-  border-color: rgba(15, 122, 82, 0.3);
-  background: rgba(15, 122, 82, 0.08);
+  border-color: rgba(45, 44, 53, 0.25);
+  background: rgba(45, 44, 53, 0.08);
 }
 
 .mode-power {
@@ -403,7 +403,7 @@ select:focus {
 }
 
 .row-active {
-  background: #eef8f2;
+  background: #eef2f8;
 }
 
 .badge {
@@ -412,7 +412,7 @@ select:focus {
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 0.7rem;
-  border: 1px solid #b7d7c9;
+  border: 1px solid #c6cedd;
   color: var(--accent);
   margin-left: var(--space-2);
 }
@@ -500,8 +500,8 @@ select:focus {
 }
 
 .schema-item.active {
-  border-color: #b7d7c9;
-  background: #edf8f1;
+  border-color: #c6cedd;
+  background: #eef2f8;
 }
 
 .table-detail {
@@ -555,7 +555,7 @@ select:focus {
 }
 
 .tab.active {
-  background: #eaf5ef;
+  background: #eceff6;
   color: var(--accent);
   font-weight: 600;
 }
@@ -581,8 +581,8 @@ select:focus {
 }
 
 .chip-btn:hover {
-  border-color: #b9d9cb;
-  background: #eef8f2;
+  border-color: #c6cedd;
+  background: #eef2f8;
 }
 
 .sql-preview {
@@ -705,8 +705,8 @@ pre {
 }
 
 .step-pill.active {
-  background: #eaf5ef;
-  border-color: #b9d9cb;
+  background: #eceff6;
+  border-color: #c6cedd;
   color: var(--accent);
 }
 
@@ -734,8 +734,8 @@ pre {
 }
 
 .select-card.active {
-  border-color: #b9d9cb;
-  background: #edf8f1;
+  border-color: #c6cedd;
+  background: #eef2f8;
 }
 
 .quickstart-form-grid {
