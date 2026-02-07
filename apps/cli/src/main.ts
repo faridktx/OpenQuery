@@ -39,6 +39,14 @@ const VERSION = '0.5.0';
 // In-memory last result for CSV export within same process
 let lastRunResult: { columns: string[]; rows: Record<string, unknown>[]; queryId: string } | null = null;
 
+function normalizeArgv(rawArgv: string[]): string[] {
+  // pnpm run forwards args as: node dist/main.js -- <args>
+  if (rawArgv[2] === '--') {
+    return [rawArgv[0], rawArgv[1], ...rawArgv.slice(3)];
+  }
+  return rawArgv;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function openStore(): LocalStore {
@@ -90,6 +98,7 @@ const program = new Command();
 program
   .name('openquery')
   .description('OpenQuery — local-first SQL Copilot')
+  .helpOption('-h, --help', 'display help')
   .version(VERSION, '-v, --version', 'Show version number');
 
 // ── doctor ───────────────────────────────────────────────────────────
@@ -1060,4 +1069,5 @@ function escapeCsvField(value: string): string {
 
 // ── parse ────────────────────────────────────────────────────────────
 
-program.parse();
+const normalizedArgv = normalizeArgv(process.argv);
+program.parse(normalizedArgv);

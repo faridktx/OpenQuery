@@ -1,5 +1,8 @@
 node_modules/
 dist/
+.next/
+.turbo/
+.cache/
 *.tsbuildinfo
 .DS_Store
 .Rhistory
