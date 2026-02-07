@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "dev": "node --loader ts-node/esm src/main.ts",
     "cli": "node dist/main.js",
-    "test": "echo 'no tests yet'",
+    "test": "pnpm run test:unit",
+    "test:unit": "pnpm run build && node --test test/unit.test.mjs",
+    "test:integration": "pnpm run build && node --test test/integration.test.mjs",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {

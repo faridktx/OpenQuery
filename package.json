@@ -17,6 +17,7 @@
     "openquery:build": "pnpm -C apps/cli build && pnpm -C apps/cli run cli",
     "desktop:dev": "pnpm --filter @openquery/desktop dev:tauri",
     "smoke:docker": "bash scripts/smoke-docker.sh",
+    "smoke:cli": "bash scripts/smoke-cli.sh",
     "clean": "pnpm -r run clean"
   },
   "engines": {
