@@ -314,80 +314,82 @@ export default function App() {
 
       <section className="main-shell">
         <header className="top-bar">
-          <div className="top-bar__left">
-            <label className="field-inline">
-              <span>Active Profile</span>
-              <select
-                value={activeProfile ?? ''}
-                onChange={(e) => handleProfileSelect(e.target.value)}
-              >
-                <option value="">Select profile</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={testActiveConnection}>
-              Test Connection
-            </button>
-          </div>
-
-          <div className="top-bar__right">
-            <label className="field-inline">
-              <span>Session Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Required for DB actions"
-              />
-            </label>
-            <span className={`status-pill mode-${powerEnabled ? 'power' : 'safe'}`}>
-              Mode: {powerEnabled ? 'POWER' : 'SAFE'}
-            </span>
-            <div className="top-actions">
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={refreshActiveSchema}
-                disabled={refreshingSchema}
-              >
-                {refreshingSchema ? 'Refreshing...' : 'Refresh schema'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  setWorkspaceDraft(null);
-                  setPage('workspace');
-                }}
-              >
-                New query
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setHelpOpen((prev) => !prev)}
-                aria-expanded={helpOpen}
-                aria-controls="global-help-panel"
-              >
-                Help
+          <div className="top-bar-inner">
+            <div className="top-bar__left">
+              <label className="field-inline">
+                <span>Active Profile</span>
+                <select
+                  value={activeProfile ?? ''}
+                  onChange={(e) => handleProfileSelect(e.target.value)}
+                >
+                  <option value="">Select profile</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={testActiveConnection}>
+                Test Connection
               </button>
             </div>
-          </div>
-          <div className="top-status top-status-row">
-            <span className={`status-pill status-${connectionStatus}`}>
-              <span className="status-dot" />
-              {connectionStatus === 'ok' ? 'Connected' : connectionStatus === 'error' ? 'Connection failed' : 'Connection unknown'}
-            </span>
-            <span className={`status-pill ${setupState.needsSetup ? 'status-schema-warn' : 'status-schema-ok'}`}>
-              {schemaStateLabel}
-            </span>
-            <span className={`status-pill ${aiReady ? 'status-ai-ok' : 'status-ai-warn'}`}>
-              {aiReady ? 'AI key ready' : 'AI key missing'}
-            </span>
+
+            <div className="top-bar__right">
+              <label className="field-inline">
+                <span>Session Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Required for DB actions"
+                />
+              </label>
+              <span className={`status-pill mode-${powerEnabled ? 'power' : 'safe'}`}>
+                Mode: {powerEnabled ? 'POWER' : 'SAFE'}
+              </span>
+              <div className="top-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={refreshActiveSchema}
+                  disabled={refreshingSchema}
+                >
+                  {refreshingSchema ? 'Refreshing...' : 'Refresh schema'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setWorkspaceDraft(null);
+                    setPage('workspace');
+                  }}
+                >
+                  New query
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setHelpOpen((prev) => !prev)}
+                  aria-expanded={helpOpen}
+                  aria-controls="global-help-panel"
+                >
+                  Help
+                </button>
+              </div>
+            </div>
+            <div className="top-status top-status-row">
+              <span className={`status-pill status-${connectionStatus}`}>
+                <span className="status-dot" />
+                {connectionStatus === 'ok' ? 'Connected' : connectionStatus === 'error' ? 'Connection failed' : 'Connection unknown'}
+              </span>
+              <span className={`status-pill ${setupState.needsSetup ? 'status-schema-warn' : 'status-schema-ok'}`}>
+                {schemaStateLabel}
+              </span>
+              <span className={`status-pill ${aiReady ? 'status-ai-ok' : 'status-ai-warn'}`}>
+                {aiReady ? 'AI key ready' : 'AI key missing'}
+              </span>
+            </div>
           </div>
         </header>
 

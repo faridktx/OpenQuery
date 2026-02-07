@@ -702,29 +702,33 @@ export default function WorkspacePage({
                 <span className={`status-pill ${isBlocked ? 'status-error' : 'status-ok'}`}>
                   {result ? (isBlocked ? 'Blocked' : 'Allowed') : 'Idle'}
                 </span>
-                <span className="status-pill">
-                  {result?.classification?.classification ?? 'n/a'}
-                </span>
+                {result && (
+                  <span className="status-pill">
+                    {result?.classification?.classification ?? 'n/a'}
+                  </span>
+                )}
               </div>
               <p className="prose">{summaryReason}</p>
-              <div className="metric-grid">
-                <div className="metric-pill">
-                  <span className="subtle">Explain Cost</span>
-                  <strong>{result?.explainSummary?.estimatedCost ?? '-'}</strong>
+              {result && (
+                <div className="metric-grid">
+                  <div className="metric-pill">
+                    <span className="subtle">Explain Cost</span>
+                    <strong>{result?.explainSummary?.estimatedCost ?? '-'}</strong>
+                  </div>
+                  <div className="metric-pill">
+                    <span className="subtle">Est Rows</span>
+                    <strong>{result?.explainSummary?.estimatedRows ?? '-'}</strong>
+                  </div>
+                  <div className="metric-pill">
+                    <span className="subtle">Exec ms</span>
+                    <strong>{result?.executionResult?.execMs ?? '-'}</strong>
+                  </div>
+                  <div className="metric-pill">
+                    <span className="subtle">Rows</span>
+                    <strong>{result?.executionResult?.rowCount ?? '-'}</strong>
+                  </div>
                 </div>
-                <div className="metric-pill">
-                  <span className="subtle">Est Rows</span>
-                  <strong>{result?.explainSummary?.estimatedRows ?? '-'}</strong>
-                </div>
-                <div className="metric-pill">
-                  <span className="subtle">Exec ms</span>
-                  <strong>{result?.executionResult?.execMs ?? '-'}</strong>
-                </div>
-                <div className="metric-pill">
-                  <span className="subtle">Rows</span>
-                  <strong>{result?.executionResult?.rowCount ?? '-'}</strong>
-                </div>
-              </div>
+              )}
               {policyFixSuggestion && (
                 <div className="stack-sm">
                   <p className="warning"><strong>How to fix:</strong> {policyFixSuggestion}</p>
