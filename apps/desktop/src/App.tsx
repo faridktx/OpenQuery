@@ -5,6 +5,7 @@ import ProfilesPage from './pages/ProfilesPage';
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
 import QuickstartPage from './pages/QuickstartPage';
+import { getOpenAIKey } from './lib/secretStore';
 
 type Page = 'workspace' | 'setup' | 'profiles' | 'history' | 'settings';
 type ConnectionStatus = 'unknown' | 'ok' | 'error';
@@ -77,16 +78,19 @@ export default function App() {
     schemaStale: false,
   });
   const [setupChecked, setSetupChecked] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [aiReady, setAiReady] = useState(false);
+  const [refreshingSchema, setRefreshingSchema] = useState(false);
 
-  const navItems: Array<{ id: Page; label: string }> = useMemo(
+  const navItems: Array<{ id: Page; label: string; meta?: string | null }> = useMemo(
     () => [
+      { id: 'setup', label: 'Setup', meta: setupState.needsSetup ? '1' : null },
       { id: 'workspace', label: 'Workspace' },
-      { id: 'setup', label: 'Setup' },
       { id: 'profiles', label: 'Profiles' },
       { id: 'history', label: 'History' },
       { id: 'settings', label: 'Settings' },
     ],
-    [],
+    [setupState.needsSetup],
   );
   const activeProfileType = useMemo(
     () => profiles.find((profile) => profile.name === activeProfile)?.db_type ?? null,
@@ -182,6 +186,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const refreshAiStatus = async (): Promise<void> => {
+      try {
+        const [stored, settings] = await Promise.all([getOpenAIKey(), api.settingsStatus()]);
+        setAiReady(Boolean(stored) || Boolean(settings.openAiKeySet));
+      } catch {
+        setAiReady(false);
+      }
+    };
+    void refreshAiStatus();
+  }, [page]);
+
+  useEffect(() => {
     const loadPower = async (): Promise<void> => {
       if (!activeProfile) {
         setPowerEnabled(false);
@@ -237,6 +253,36 @@ export default function App() {
     }
   };
 
+  const refreshActiveSchema = async (): Promise<void> => {
+    if (!activeProfile) {
+      setTopError('Select an active profile first.');
+      return;
+    }
+    const profileType = profiles.find((p) => p.name === activeProfile)?.db_type ?? 'postgres';
+    const resolvedPassword = profileType === 'sqlite' ? '' : password.trim();
+    if (profileType !== 'sqlite' && !resolvedPassword) {
+      setTopError('Enter session password, then click Refresh schema.');
+      return;
+    }
+    setRefreshingSchema(true);
+    setTopError('');
+    try {
+      await api.schemaRefresh(resolvedPassword, activeProfile);
+      await evaluateSetupState(profiles, activeProfile, false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTopError(msg);
+    } finally {
+      setRefreshingSchema(false);
+    }
+  };
+
+  const schemaStateLabel = setupState.needsSetup
+    ? setupState.schemaStale
+      ? 'Schema stale'
+      : 'Schema missing'
+    : 'Schema ready';
+
   return (
     <div className="app-shell">
       <aside className="side-nav">
@@ -259,7 +305,8 @@ export default function App() {
               className={page === item.id ? 'nav-btn active' : 'nav-btn'}
               onClick={() => setPage(item.id)}
             >
-              {item.label}
+              <span>{item.label}</span>
+              {item.meta && <span className="nav-btn__meta">{item.meta}</span>}
             </button>
           ))}
         </nav>
@@ -285,6 +332,18 @@ export default function App() {
             <button type="button" className="btn btn-secondary" onClick={testActiveConnection}>
               Test Connection
             </button>
+            <div className="top-status">
+              <span className={`status-pill status-${connectionStatus}`}>
+                <span className="status-dot" />
+                {connectionStatus === 'ok' ? 'Connected' : connectionStatus === 'error' ? 'Connection failed' : 'Connection unknown'}
+              </span>
+              <span className={`status-pill ${setupState.needsSetup ? 'status-schema-warn' : 'status-schema-ok'}`}>
+                {schemaStateLabel}
+              </span>
+              <span className={`status-pill ${aiReady ? 'status-ai-ok' : 'status-ai-warn'}`}>
+                {aiReady ? 'AI key ready' : 'AI key missing'}
+              </span>
+            </div>
           </div>
 
           <div className="top-bar__right">
@@ -297,12 +356,38 @@ export default function App() {
                 placeholder="Required for DB actions"
               />
             </label>
-            <span className={`status-pill status-${connectionStatus}`}>
-              Connection: {connectionStatus === 'ok' ? 'Healthy' : connectionStatus === 'error' ? 'Failed' : 'Unknown'}
-            </span>
             <span className={`status-pill mode-${powerEnabled ? 'power' : 'safe'}`}>
               Mode: {powerEnabled ? 'POWER' : 'SAFE'}
             </span>
+            <div className="top-actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={refreshActiveSchema}
+                disabled={refreshingSchema}
+              >
+                {refreshingSchema ? 'Refreshing...' : 'Refresh schema'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => {
+                  setWorkspaceDraft(null);
+                  setPage('workspace');
+                }}
+              >
+                New query
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setHelpOpen((prev) => !prev)}
+                aria-expanded={helpOpen}
+                aria-controls="global-help-panel"
+              >
+                Help
+              </button>
+            </div>
           </div>
         </header>
 
@@ -321,57 +406,82 @@ export default function App() {
         )}
 
         <main className="main-content">
-          {page === 'workspace' && (
-            <WorkspacePage
-              password={password}
-              activeProfile={activeProfile}
-              activeProfileType={activeProfileType}
-              safePolicy={safePolicy}
-              powerEnabled={powerEnabled}
-              draft={workspaceDraft}
-              onDraftConsumed={() => setWorkspaceDraft(null)}
-              onNavigateSetup={() => setPage('setup')}
-              onNavigateSettings={() => setPage('settings')}
-            />
-          )}
-          {page === 'setup' && (
-            <QuickstartPage
-              password={password}
-              activeProfile={activeProfile}
-              profiles={profiles}
-              setupState={setupState}
-              onReloadProfileState={() => syncProfileState(false)}
-              onNavigate={setPage}
-            />
-          )}
-          {page === 'profiles' && (
-            <ProfilesPage
-              password={password}
-              activeProfile={activeProfile}
-              onProfilesChanged={(nextProfiles, nextActive) => {
-                setProfiles(nextProfiles);
-                setActiveProfile(nextActive);
-                void evaluateSetupState(nextProfiles, nextActive, false);
-              }}
-              onConnectionStatusChange={setConnectionStatus}
-            />
-          )}
-          {page === 'history' && (
-            <HistoryPage
-              onOpenWorkspace={(draft) => {
-                setWorkspaceDraft(draft);
-                setPage('workspace');
-              }}
-            />
-          )}
-          {page === 'settings' && (
-            <SettingsPage
-              safePolicy={safePolicy}
-              onSafePolicyChange={setSafePolicy}
-            />
-          )}
+          <div className="main-content-inner">
+            {page === 'workspace' && (
+              <WorkspacePage
+                password={password}
+                activeProfile={activeProfile}
+                activeProfileType={activeProfileType}
+                safePolicy={safePolicy}
+                powerEnabled={powerEnabled}
+                draft={workspaceDraft}
+                onDraftConsumed={() => setWorkspaceDraft(null)}
+                onNavigateSetup={() => setPage('setup')}
+                onNavigateSettings={() => setPage('settings')}
+              />
+            )}
+            {page === 'setup' && (
+              <QuickstartPage
+                password={password}
+                activeProfile={activeProfile}
+                profiles={profiles}
+                setupState={setupState}
+                onReloadProfileState={() => syncProfileState(false)}
+                onNavigate={setPage}
+              />
+            )}
+            {page === 'profiles' && (
+              <ProfilesPage
+                password={password}
+                activeProfile={activeProfile}
+                onProfilesChanged={(nextProfiles, nextActive) => {
+                  setProfiles(nextProfiles);
+                  setActiveProfile(nextActive);
+                  void evaluateSetupState(nextProfiles, nextActive, false);
+                }}
+                onConnectionStatusChange={setConnectionStatus}
+              />
+            )}
+            {page === 'history' && (
+              <HistoryPage
+                onOpenWorkspace={(draft) => {
+                  setWorkspaceDraft(draft);
+                  setPage('workspace');
+                }}
+              />
+            )}
+            {page === 'settings' && (
+              <SettingsPage
+                safePolicy={safePolicy}
+                onSafePolicyChange={setSafePolicy}
+              />
+            )}
+          </div>
         </main>
       </section>
+
+      {helpOpen && (
+        <aside id="global-help-panel" className="help-panel" role="dialog" aria-label="OpenQuery help">
+          <div className="section-header">
+            <h3>Quick Help</h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setHelpOpen(false)}>
+              Close
+            </button>
+          </div>
+          <ol className="checklist">
+            <li>Open Setup and choose a demo mode or connect Postgres.</li>
+            <li>Refresh schema so Ask and guardrails understand your tables.</li>
+            <li>Run Ask (AI) or SQL, then review Policy + Explain before execute.</li>
+            <li>Use History to reopen and export prior queries.</li>
+          </ol>
+          <h4>Status meanings</h4>
+          <ul className="checklist">
+            <li><strong>Connected:</strong> DB profile responds to a test query.</li>
+            <li><strong>Schema stale:</strong> refresh schema before relying on Ask output.</li>
+            <li><strong>AI key missing:</strong> SQL tab still works; Ask needs key in Settings.</li>
+          </ul>
+        </aside>
+      )}
     </div>
   );
 }

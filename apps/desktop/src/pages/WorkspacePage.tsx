@@ -94,6 +94,7 @@ export default function WorkspacePage({
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
+  const [activityLabel, setActivityLabel] = useState('');
 
   const [tab, setTab] = useState<'ask' | 'sql'>('ask');
   const [askMode, setAskMode] = useState<'safe' | 'standard'>('safe');
@@ -232,6 +233,7 @@ export default function WorkspacePage({
       return;
     }
     setRunning(true);
+    setActivityLabel('Refreshing schema...');
     setError('');
     setStatus('');
     setLoadingSchema(true);
@@ -245,6 +247,7 @@ export default function WorkspacePage({
     } finally {
       setRunning(false);
       setLoadingSchema(false);
+      setActivityLabel('');
     }
   };
 
@@ -256,6 +259,7 @@ export default function WorkspacePage({
       return;
     }
     setRunning(true);
+    setActivityLabel(execute ? 'Generating SQL, validating policy, and executing query...' : 'Generating SQL and validating policy...');
     setError('');
     setStatus('');
     let storedKey: string | null = null;
@@ -299,6 +303,7 @@ export default function WorkspacePage({
       setError(msg);
     } finally {
       setRunning(false);
+      setActivityLabel('');
     }
   };
 
@@ -310,6 +315,13 @@ export default function WorkspacePage({
       return;
     }
     setRunning(true);
+    setActivityLabel(
+      action === 'run'
+        ? 'Validating policy, running EXPLAIN, and executing SQL...'
+        : action === 'explain'
+          ? 'Running EXPLAIN preflight...'
+          : 'Validating policy and preparing dry run...',
+    );
     setError('');
     setStatus('');
     try {
@@ -338,6 +350,7 @@ export default function WorkspacePage({
       setError(msg);
     } finally {
       setRunning(false);
+      setActivityLabel('');
     }
   };
 
@@ -352,6 +365,7 @@ export default function WorkspacePage({
       return;
     }
     setRunning(true);
+    setActivityLabel('Preparing POWER write preview...');
     setError('');
     try {
       const preview = await api.writePreview(sql, params, resolvedPassword);
@@ -366,6 +380,7 @@ export default function WorkspacePage({
       setError(msg);
     } finally {
       setRunning(false);
+      setActivityLabel('');
     }
   };
 
@@ -384,6 +399,7 @@ export default function WorkspacePage({
     }
     setShowWriteModal(false);
     setRunning(true);
+    setActivityLabel('Executing POWER write...');
     setError('');
     const resolvedPassword = requiresPassword ? password.trim() : '';
     try {
@@ -410,6 +426,7 @@ export default function WorkspacePage({
       setError(msg);
     } finally {
       setRunning(false);
+      setActivityLabel('');
     }
   };
 
@@ -419,6 +436,14 @@ export default function WorkspacePage({
   const enforcedLimitWarning =
     result?.validation?.warnings?.some((w: string) => w.toLowerCase().includes('limit'));
   const hasSchemaTables = Array.isArray(schemaSnapshot?.tables) && schemaSnapshot.tables.length > 0;
+  const policyFixSuggestion =
+    result?.status === 'blocked'
+      ? selectStarWarning
+        ? 'Fix it: list explicit columns instead of SELECT *.'
+        : enforcedLimitWarning
+          ? 'Fix it: use a tighter LIMIT or add filters to reduce row volume.'
+          : 'Fix it: switch to Safe-compatible SQL or use POWER preview for writes.'
+      : null;
 
   if (!activeProfile) {
     return (
@@ -487,82 +512,84 @@ export default function WorkspacePage({
     <section className="workspace-shell">
       {error && <div className="inline-error preserve-lines">{error}</div>}
       {status && <div className="inline-success">{status}</div>}
-      <div className="workspace-toolbar">
+      {running && activityLabel && <div className="inline-warning">{activityLabel}</div>}
+      <div className="workspace-header">
+        <div>
+          <h2>Workspace</h2>
+          <p className="muted">Ask in natural language or run SQL directly with policy and explain guardrails.</p>
+        </div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowHelp(true)}>
           Help
         </button>
       </div>
 
-      <div className="workspace-grid">
-        <aside className="panel schema-panel">
+      <div className="workspace-main-grid">
+        <section className="panel workspace-left">
           <div className="section-header">
-            <h3>Schema Explorer</h3>
+            <h3>Query Builder</h3>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={handleRefreshSchema}
               disabled={running || loadingSchema}
             >
-              {loadingSchema ? 'Refreshing...' : 'Refresh'}
+              {loadingSchema ? 'Refreshing...' : 'Refresh schema'}
             </button>
           </div>
-          <input
-            type="text"
-            placeholder="Search tables or columns"
-            value={schemaSearch}
-            onChange={(e) => setSchemaSearch(e.target.value)}
-          />
-          {!schemaSnapshot?.tables?.length ? (
-            <div className="empty-mini">
-              <p>No schema snapshot found.</p>
-              <p className="muted">Refresh schema after testing your profile connection.</p>
-            </div>
-          ) : (
-            <div className="schema-list">
-              {filteredTables.map((table: any) => {
-                const fullName = `${table.schema || 'public'}.${table.name}`;
-                return (
-                  <button
-                    key={fullName}
-                    type="button"
-                    className={selectedTable?.name === table.name ? 'schema-item active' : 'schema-item'}
-                    onClick={() => setSelectedTable(table)}
-                  >
-                    {fullName}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {selectedTable && (
-            <div className="table-detail">
-              <h4>{selectedTable.schema || 'public'}.{selectedTable.name}</h4>
-              <ul>
-                {(selectedTable.columns ?? []).map((col: any) => (
-                  <li key={col.name}>
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => navigator.clipboard.writeText(col.name)}
-                    >
-                      {col.name}
-                    </button>
-                    <span className="muted">{col.dataType}</span>
-                    {col.isPrimaryKey && <span className="badge">PK</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </aside>
 
-        <section className="panel editor-panel">
+          <details className="schema-accordion" open>
+            <summary>Schema Explorer</summary>
+            <div className="schema-accordion__body">
+              <input
+                type="text"
+                placeholder="Search tables or columns"
+                value={schemaSearch}
+                onChange={(e) => setSchemaSearch(e.target.value)}
+              />
+              <div className="schema-list">
+                {filteredTables.map((table: any) => {
+                  const fullName = `${table.schema || 'public'}.${table.name}`;
+                  return (
+                    <button
+                      key={fullName}
+                      type="button"
+                      className={selectedTable?.name === table.name ? 'schema-item active' : 'schema-item'}
+                      onClick={() => setSelectedTable(table)}
+                    >
+                      {fullName}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedTable && (
+                <div className="table-detail">
+                  <h4>{selectedTable.schema || 'public'}.{selectedTable.name}</h4>
+                  <ul>
+                    {(selectedTable.columns ?? []).map((col: any) => (
+                      <li key={col.name}>
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => navigator.clipboard.writeText(col.name)}
+                        >
+                          {col.name}
+                        </button>
+                        <span className="muted">{col.dataType}</span>
+                        {col.isPrimaryKey && <span className="badge">PK</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </details>
+
           <div className="tab-row">
             <button type="button" className={tab === 'ask' ? 'tab active' : 'tab'} onClick={() => setTab('ask')}>
-              Ask
+              Ask (AI)
             </button>
             <button type="button" className={tab === 'sql' ? 'tab active' : 'tab'} onClick={() => setTab('sql')}>
-              SQL
+              Run SQL
             </button>
           </div>
 
@@ -571,7 +598,7 @@ export default function WorkspacePage({
               {(openAiKeyMissing || !hasOpenAiKey) && !checkingOpenAiKey && (
                 <div className="callout">
                   <strong>OpenAI key not set.</strong>
-                  <p>Set your key in Settings to enable Ask. SQL mode remains available without a key.</p>
+                  <p>Ask is disabled until a key is saved in Settings.</p>
                   <div className="action-row">
                     <button type="button" className="btn btn-secondary btn-sm" onClick={onNavigateSettings}>
                       Go to Settings
@@ -581,30 +608,22 @@ export default function WorkspacePage({
               )}
               {checkingOpenAiKey && <p className="muted">Checking AI key status...</p>}
               <textarea
-                rows={5}
+                rows={6}
                 value={question}
-                placeholder="Ask: show active users with recent paid orders"
+                placeholder="Example: show active users with recent paid orders"
                 onChange={(e) => setQuestion(e.target.value)}
               />
               <div className="chip-row">
                 {examplePrompts.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    className="chip-btn"
-                    onClick={() => {
-                      setQuestion(chip);
-                      setTab('ask');
-                    }}
-                  >
+                  <button key={chip} type="button" className="chip-btn" onClick={() => setQuestion(chip)}>
                     {chip}
                   </button>
                 ))}
               </div>
               <div className="action-row">
                 <select value={askMode} onChange={(e) => setAskMode(e.target.value as 'safe' | 'standard')}>
-                  <option value="safe">Safe</option>
-                  <option value="standard">Standard</option>
+                  <option value="safe">Safe mode</option>
+                  <option value="standard">Power mode</option>
                 </select>
                 <button
                   type="button"
@@ -612,12 +631,14 @@ export default function WorkspacePage({
                   onClick={() => runAsk(false)}
                   disabled={running || !hasOpenAiKey || checkingOpenAiKey}
                 >
-                  Generate
+                  Generate (dry run)
                 </button>
-                <button type="button" className="btn" onClick={() => runAsk(false)} disabled={running || !hasOpenAiKey || checkingOpenAiKey}>
-                  Dry Run
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => runAsk(true)} disabled={running || !hasOpenAiKey || checkingOpenAiKey}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => runAsk(true)}
+                  disabled={running || !hasOpenAiKey || checkingOpenAiKey}
+                >
                   Generate + Run
                 </button>
               </div>
@@ -632,8 +653,8 @@ export default function WorkspacePage({
               />
               <div className="action-row">
                 <select value={sqlMode} onChange={(e) => setSqlMode(e.target.value as 'safe' | 'standard')}>
-                  <option value="safe">Safe</option>
-                  <option value="standard">Standard</option>
+                  <option value="safe">Safe mode</option>
+                  <option value="standard">Power mode</option>
                 </select>
                 <button type="button" className="btn" onClick={() => runSqlAction('run')} disabled={running}>
                   Run
@@ -642,7 +663,7 @@ export default function WorkspacePage({
                   Explain
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={() => runSqlAction('dry-run')} disabled={running}>
-                  Dry Run
+                  Dry run
                 </button>
                 <button type="button" className="btn btn-danger" onClick={() => openWritePreview(sqlText, [])} disabled={running || !sqlText.trim()}>
                   Preview Write
@@ -650,110 +671,122 @@ export default function WorkspacePage({
               </div>
             </div>
           )}
-
-          {result?.sql && (
-            <div className="sql-preview">
-              <div className="section-header">
-                <h4>SQL Preview</h4>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => navigator.clipboard.writeText(result.sql)}
-                >
-                  Copy SQL
-                </button>
-              </div>
-              <pre><code>{result.sql}</code></pre>
-            </div>
-          )}
         </section>
 
-        <aside className="panel insight-panel">
-          <div className="safety-panel">
-            <h3>Safety</h3>
-            <p><strong>Classification:</strong> {result?.classification?.classification ?? 'n/a'}</p>
-            <p><strong>Status:</strong> {result?.status ?? 'idle'}</p>
-            <p><strong>Select * detected:</strong> {selectStarWarning ? 'yes' : 'no'}</p>
-            <p><strong>LIMIT enforced:</strong> {enforcedLimitWarning ? 'yes' : 'no'}</p>
-            <p><strong>Blocked tables:</strong> none detected</p>
-            {result?.validation?.reason && result.status === 'blocked' && (
-              <p className="text-err">{result.validation.reason}</p>
-            )}
-          </div>
-
-          <div className="explain-panel">
-            <h3>Explain</h3>
-            {result?.explainSummary ? (
-              <>
-                <p><strong>Estimated rows:</strong> {result.explainSummary.estimatedRows}</p>
-                <p><strong>Estimated cost:</strong> {result.explainSummary.estimatedCost}</p>
-                <p><strong>Seq scan:</strong> {result.explainSummary.hasSeqScan ? 'yes' : 'no'}</p>
-              </>
+        <aside className="panel workspace-right">
+          <details className="inspector-section" open>
+            <summary>SQL</summary>
+            {result?.sql ? (
+              <div className="inspector-body">
+                <div className="action-row">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard.writeText(result.sql)}>
+                    Copy SQL
+                  </button>
+                </div>
+                <pre><code>{result.sql}</code></pre>
+              </div>
             ) : (
-              <p className="muted">No explain summary yet.</p>
+              <p className="muted">No SQL yet. Generate or run a query to populate this section.</p>
             )}
-            {(result?.explainWarnings ?? []).map((warning) => (
-              <p key={warning} className="warning">{warning}</p>
-            ))}
-            {(result?.explainBlockers ?? []).map((blocker) => (
-              <p key={blocker} className="text-err">{blocker}</p>
-            ))}
-          </div>
+          </details>
+
+          <details className="inspector-section" open>
+            <summary>Policy decision</summary>
+            <div className="inspector-body">
+              <p><strong>Status:</strong> {result?.status ?? 'idle'}</p>
+              <p><strong>Classification:</strong> {result?.classification?.classification ?? 'n/a'}</p>
+              {result?.validation?.reason && (
+                <p className="text-err">Reason: {result.validation.reason}</p>
+              )}
+              {policyFixSuggestion && <p className="warning">{policyFixSuggestion}</p>}
+            </div>
+          </details>
+
+          <details className="inspector-section" open>
+            <summary>Explain summary</summary>
+            <div className="inspector-body">
+              {result?.explainSummary ? (
+                <>
+                  <p><strong>Estimated rows:</strong> {result.explainSummary.estimatedRows}</p>
+                  <p><strong>Estimated cost:</strong> {result.explainSummary.estimatedCost}</p>
+                  <p><strong>Seq scan:</strong> {result.explainSummary.hasSeqScan ? 'yes' : 'no'}</p>
+                </>
+              ) : (
+                <p className="muted">No explain summary yet.</p>
+              )}
+              {(result?.explainWarnings ?? []).map((warning) => (
+                <p key={warning} className="warning">{warning}</p>
+              ))}
+              {(result?.explainBlockers ?? []).map((blocker) => (
+                <p key={blocker} className="text-err">{blocker}</p>
+              ))}
+            </div>
+          </details>
+
+          <details className="inspector-section" open>
+            <summary>Results</summary>
+            <div className="inspector-body">
+              <div className="action-row">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={copyResults} disabled={!rows.length}>
+                  Copy
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={exportCsv} disabled={!rows.length}>
+                  Export CSV
+                </button>
+              </div>
+              {!result && <p className="muted">Run a query to view rows.</p>}
+              {result && !result.executionResult && <p className="muted">No result rows for this action.</p>}
+              {result?.executionResult && (
+                <>
+                  <p className="muted">
+                    {result.executionResult.rowCount} rows in {result.executionResult.execMs}ms
+                    {result.executionResult.truncated ? ' (truncated)' : ''}
+                  </p>
+                  <div className="table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          {columns.map((col) => (
+                            <th key={col}>{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedRows.map((row, idx) => (
+                          <tr key={idx}>
+                            {columns.map((col) => (
+                              <td key={col}>{row[col] == null ? <span className="muted">NULL</span> : String(row[col])}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="pager">
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      Previous
+                    </button>
+                    <span className="muted">Page {page} / {maxPage}</span>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={page >= maxPage} onClick={() => setPage((p) => p + 1)}>
+                      Next
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </details>
+
+          <details className="inspector-section">
+            <summary>Execution metadata</summary>
+            <div className="inspector-body">
+              <p><strong>Source:</strong> {result?.source ?? 'n/a'}</p>
+              <p><strong>Model:</strong> {result?.model ?? 'n/a'}</p>
+              <p><strong>Confidence:</strong> {typeof result?.confidence === 'number' ? `${Math.round(result.confidence * 100)}%` : 'n/a'}</p>
+              <p><strong>Rows:</strong> {result?.executionResult?.rowCount ?? 0}</p>
+            </div>
+          </details>
         </aside>
       </div>
-
-      <section className="panel results-panel">
-        <div className="section-header">
-          <h3>Results</h3>
-          <div className="action-row">
-            <button type="button" className="btn btn-secondary btn-sm" onClick={copyResults} disabled={!rows.length}>
-              Copy
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={exportCsv} disabled={!rows.length}>
-              Export CSV
-            </button>
-          </div>
-        </div>
-        {!result && <p className="muted">Run a query to view results.</p>}
-        {result && !result.executionResult && <p className="muted">No result rows for this action.</p>}
-        {result?.executionResult && (
-          <>
-            <p className="muted">
-              {result.executionResult.rowCount} rows in {result.executionResult.execMs}ms
-              {result.executionResult.truncated ? ' (truncated)' : ''}
-            </p>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {columns.map((col) => (
-                      <th key={col}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedRows.map((row, idx) => (
-                    <tr key={idx}>
-                      {columns.map((col) => (
-                        <td key={col}>{row[col] == null ? <span className="muted">NULL</span> : String(row[col])}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="pager">
-              <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Previous
-              </button>
-              <span className="muted">Page {page} / {maxPage}</span>
-              <button type="button" className="btn btn-secondary btn-sm" disabled={page >= maxPage} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </button>
-            </div>
-          </>
-        )}
-      </section>
 
       {showWriteModal && writePreview && (
         <div className="modal-overlay">

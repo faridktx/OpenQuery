@@ -75,6 +75,12 @@ const DOCKER_DEFAULTS = {
 };
 
 const SAMPLE_SQL = 'SELECT id, email, full_name FROM users WHERE is_active = 1 ORDER BY id LIMIT 20;';
+const STEP_WHY: Record<number, string> = {
+  1: 'Choosing a mode sets the safest path to a working query. No-Docker is the fastest start.',
+  2: 'Connection setup confirms the app can reach your data source before any generation or execution.',
+  3: 'Schema refresh gives guardrails and Ask accurate table/column context.',
+  4: 'First query validates the full path: generation, policy checks, explain, and results.',
+};
 
 export default function QuickstartPage({
   password,
@@ -104,6 +110,7 @@ export default function QuickstartPage({
   const [dockerStatus, setDockerStatus] = useState<{ installed: boolean; daemonRunning: boolean; message?: string } | null>(null);
   const [dockerRunning, setDockerRunning] = useState(false);
   const [dockerPort, setDockerPort] = useState<number | null>(null);
+  const [showWhy, setShowWhy] = useState(false);
 
   const examplePrompts = useMemo(
     () => ['Show active users', 'Top spenders', 'Recent paid orders'],
@@ -441,7 +448,6 @@ export default function QuickstartPage({
           'Connection details',
           'Refresh schema',
           'Run first query',
-          'Done',
         ].map((label, index) => {
           const indexStep = index + 1;
           return (
@@ -460,7 +466,13 @@ export default function QuickstartPage({
 
       {step === 1 && (
         <div className="card quickstart-panel">
-          <h3>Step 1: Choose setup mode</h3>
+          <div className="section-header">
+            <h3>Step 1: Choose setup mode</h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
+              Why this matters
+            </button>
+          </div>
+          {showWhy && <div className="inline-warning">{STEP_WHY[1]}</div>}
           <p className="muted">Pick one mode now. You can switch any time from Setup.</p>
           <div className="quickstart-mode-grid">
             <button
@@ -498,7 +510,13 @@ export default function QuickstartPage({
 
       {step === 2 && (
         <div className="card quickstart-panel">
-          <h3>Step 2: Connection details</h3>
+          <div className="section-header">
+            <h3>Step 2: Connection details</h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
+              Why this matters
+            </button>
+          </div>
+          {showWhy && <div className="inline-warning">{STEP_WHY[2]}</div>}
 
           {mode === 'no-docker' && (
             <>
@@ -677,7 +695,13 @@ export default function QuickstartPage({
 
       {step === 3 && (
         <div className="card quickstart-panel">
-          <h3>Step 3: Refresh schema</h3>
+          <div className="section-header">
+            <h3>Step 3: Refresh schema</h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
+              Why this matters
+            </button>
+          </div>
+          {showWhy && <div className="inline-warning">{STEP_WHY[3]}</div>}
           <p className="muted">
             Refresh powers schema explorer, guardrails, and Ask generation.
             {mode === 'no-docker' && ' SQLite demo mode uses simplified EXPLAIN output.'}
@@ -713,7 +737,13 @@ export default function QuickstartPage({
 
       {step === 4 && (
         <div className="card quickstart-panel">
-          <h3>Step 4: Run first query</h3>
+          <div className="section-header">
+            <h3>Step 4: Run first query</h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowWhy((prev) => !prev)}>
+              Why this matters
+            </button>
+          </div>
+          {showWhy && <div className="inline-warning">{STEP_WHY[4]}</div>}
           <p className="muted">Run Ask with OpenAI, or run the SQL sample without OpenAI.</p>
           {openAiKeyMissing && (
             <div className="callout">
@@ -825,39 +855,29 @@ export default function QuickstartPage({
             <button type="button" className="btn btn-secondary" onClick={() => setStep(3)}>
               Back
             </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setStep(5)}
-              disabled={!completion.firstQuery}
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 5 && (
-        <div className="card quickstart-panel">
-          <h3>Step 5: Done</h3>
-          <p className="muted">Setup is complete. You can now run guarded SQL with confidence.</p>
-          <ul className="checklist">
-            <li>{completion.mode ? 'Done' : 'Pending'}: Setup mode selected</li>
-            <li>{completion.connection ? 'Done' : 'Pending'}: Connection ready</li>
-            <li>{completion.schema ? 'Done' : 'Pending'}: Schema refreshed</li>
-            <li>{completion.firstQuery ? 'Done' : 'Pending'}: First query executed</li>
-          </ul>
-          <div className="action-row">
-            <button type="button" className="btn" onClick={() => onNavigate('workspace')}>
+            <button type="button" className="btn" onClick={() => onNavigate('workspace')} disabled={!completion.firstQuery}>
               Go to Workspace
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => onNavigate('history')}>
-              View History
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={() => onNavigate('settings')}>
-              Learn Safe vs POWER
-            </button>
           </div>
+          {completion.firstQuery && (
+            <div className="card quickstart-done">
+              <h4>Setup complete</h4>
+              <ul className="checklist">
+                <li>Mode configured</li>
+                <li>Connection ready</li>
+                <li>Schema refreshed</li>
+                <li>First query completed</li>
+              </ul>
+              <div className="action-row">
+                <button type="button" className="btn btn-secondary" onClick={() => onNavigate('history')}>
+                  View History
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => onNavigate('settings')}>
+                  Open Settings
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
