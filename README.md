@@ -49,6 +49,12 @@ pnpm --filter @openquery/desktop build
 pnpm --filter @openquery/desktop tauri build --no-bundle
 ```
 
+## OpenAI Key in Desktop
+
+- Primary flow: open Desktop `Settings` -> `AI Provider` and save your OpenAI API key.
+- Fallback for power users: set `OPENAI_API_KEY` before launching the app.
+- Without a key, `Ask` is disabled and SQL mode remains available.
+
 ## Node and pnpm Policy
 
 - Target runtime for parity with CI: Node 20 LTS

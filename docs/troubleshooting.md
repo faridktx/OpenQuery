@@ -100,7 +100,13 @@ Symptom:
 
 - Ask flow fails with key-not-set error
 
-Fix:
+Fix (desktop-first):
+
+1. Open `Settings` -> `AI Provider`.
+2. Paste key, click `Save`, then `Test key`.
+3. Return to Workspace; Ask buttons are enabled when key is valid.
+
+Fallback (terminal/env):
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -108,7 +114,8 @@ export OPENAI_API_KEY=sk-...
 
 Desktop behavior:
 
-- Workspace shows an explicit callout and does not crash.
+- Ask remains disabled with a clear CTA to Settings.
+- SQL mode still works without an OpenAI key.
 
 ## Desktop build failures
 

@@ -67,10 +67,16 @@ If port `55432` is busy, pick another free port and reuse it for all fixture com
 
 ## 3) No OpenAI key fallback
 
-If `OPENAI_API_KEY` is not configured:
+If no OpenAI key is configured in Desktop Settings:
 
 - Keep the same flow but use SQL tab instead of Ask generation.
 - The app shows a clear OpenAI key callout and continues working for SQL execution/explain.
+
+Optional fallback for power users:
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
 
 ## 4) CLI fallback path (if UI demo is blocked)
 

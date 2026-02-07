@@ -6,7 +6,7 @@
 2. **Rust** toolchain (for Tauri) — install via [rustup](https://rustup.rs/)
 3. **Tauri CLI**: `cargo install tauri-cli` or use `pnpm tauri` from the desktop package
 4. **Postgres** running (use `docker compose up -d` from `infra/docker/`)
-5. **OPENAI_API_KEY** set in environment
+5. OpenAI key configured in Desktop `Settings` -> `AI Provider` (env var fallback optional)
 
 ## Setup
 

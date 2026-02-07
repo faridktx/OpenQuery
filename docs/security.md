@@ -33,6 +33,8 @@ This is used only to generate a SQL plan.
 
 - CLI passwords are prompted at runtime and not stored in query history.
 - Desktop can store passwords in OS keychain.
+- Desktop OpenAI API key is stored in OS keychain when saved in Settings.
+- `OPENAI_API_KEY` environment variable is supported as fallback for CLI/power users.
 - Profile metadata is stored locally in SQLite.
 
 ## Auditability
