@@ -82,7 +82,7 @@ Pass criteria:
 
 Current macOS bundle output:
 - `.app` bundle is generated at `apps/desktop/src-tauri/target/release/bundle/macos/`.
-- `.dmg` is not produced by default in the current configuration.
+- `.dmg` bundle is generated at `apps/desktop/src-tauri/target/release/bundle/dmg/`.
 
 8. CLI build
 ```bash

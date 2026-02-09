@@ -1,0 +1,47 @@
+name: publish-cli
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify CLI version matches tag
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CLI_VERSION="$(node -p "require('./apps/cli/package.json').version")"
+          if [ "${CLI_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "Tag version (${TAG_VERSION}) does not match CLI version (${CLI_VERSION})"
+            exit 1
+          fi
+      - name: Build CLI
+        run: pnpm -C apps/cli build
+      - name: Configure npm auth for GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "@faridktx:registry=https://npm.pkg.github.com" > ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+      - name: Publish CLI package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish
+        working-directory: apps/cli

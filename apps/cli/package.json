@@ -1,6 +1,6 @@
 {
-  "name": "@openquery/cli",
-  "version": "0.0.1",
+  "name": "@faridktx/openquery-cli",
+  "version": "0.5.1",
   "description": "OpenQuery CLI — local-first SQL Copilot",
   "type": "module",
   "files": [
@@ -9,6 +9,9 @@
   "bin": {
     "openquery": "dist/main.js",
     "oq": "dist/main.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/main.js --sourcemap --external:better-sqlite3 --external:pg --external:openai --external:ajv --external:node-sql-parser --external:commander",

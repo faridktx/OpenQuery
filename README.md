@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo/openquery-lockup.svg" alt="OpenQuery" width="640" />
+  <img src="apps/desktop/public/openquerylogo-rounded.png" alt="OpenQuery logo" width="160" />
 
   <p><strong>Local-first SQL copilot for teams that need speed with guardrails.</strong></p>
 
@@ -44,13 +44,6 @@ Teams want AI-assisted querying, but do not want unbounded query risk.
 - Shared core package used by both desktop and CLI
 - Eval harness and benchmark scripts for regression tracking
 
-## Screenshots
-
-![Setup](assets/screenshots/setup.png)
-![Workspace](assets/screenshots/workspace.png)
-![Policy Block](assets/screenshots/policy-block.png)
-![Results](assets/screenshots/results.png)
-
 ## 2-Minute Quickstart (Desktop)
 ### Option A: No-Docker demo (recommended)
 ```bash
@@ -85,9 +78,10 @@ pnpm smoke:integration
 
 ## Quickstart (CLI)
 ```bash
-pnpm -C apps/cli build
-node apps/cli/dist/main.js --help
-node apps/cli/dist/main.js doctor
+npm config set @faridktx:registry https://npm.pkg.github.com
+npm i -g @faridktx/openquery-cli
+openquery doctor
+oq doctor
 ```
 
 Detailed CLI usage: `docs/cli.md`
@@ -151,8 +145,9 @@ pnpm --filter @openquery/desktop tauri build --no-bundle
 pnpm --filter @openquery/desktop build:bundle
 ```
 
-Current macOS bundle output is `.app` under `apps/desktop/src-tauri/target/release/bundle/macos/`.
-`.dmg` generation is not enabled in the current repository configuration.
+Current macOS bundle outputs:
+- `.app` under `apps/desktop/src-tauri/target/release/bundle/macos/`
+- `.dmg` under `apps/desktop/src-tauri/target/release/bundle/dmg/`
 
 ## License
 MIT. See `LICENSE`.

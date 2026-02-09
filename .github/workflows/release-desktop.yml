@@ -1,0 +1,45 @@
+name: release-desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-desktop:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build desktop bundle
+        run: pnpm --filter @openquery/desktop build:bundle
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          DMG_PATH="$(find apps/desktop/src-tauri/target/release/bundle -type f -name '*.dmg' | head -n 1)"
+          APP_PATH="$(find apps/desktop/src-tauri/target/release/bundle -type d -name '*.app' | head -n 1)"
+          if [ -z "${DMG_PATH}" ] || [ -z "${APP_PATH}" ]; then
+            echo "Missing desktop bundle artifacts"
+            exit 1
+          fi
+          cp "${DMG_PATH}" release-assets/
+          ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "release-assets/$(basename "${APP_PATH}").zip"
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*.dmg
+            release-assets/*.zip

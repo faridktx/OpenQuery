@@ -1,6 +1,6 @@
 {
   "name": "@openquery/desktop",
-  "version": "0.0.1",
+  "version": "0.5.1",
   "description": "OpenQuery Desktop — Tauri app",
   "private": true,
   "type": "module",
