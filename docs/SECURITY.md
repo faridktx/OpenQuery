@@ -1,55 +1,42 @@
 # Security and Data Boundary
 
+Canonical security doc for packaging. Source-aligned with `docs/security.md`.
+
 ## Core principle
 
-OpenQuery is local-first. Query execution and credentials remain local to the machine running OpenQuery.
+OpenQuery is local-first. Credentials and query execution stay on the local machine.
 
-## What is sent to OpenAI
+## Data sent to OpenAI (Ask path)
 
-When using `ask`:
+- natural language question
+- schema metadata context
+- safety/mode context
 
-- user question text
-- selected schema context (table and column metadata)
-- mode/policy context (safe vs standard)
-
-This is used only to generate a SQL plan.
-
-## What is not sent to OpenAI
+## Data not sent to OpenAI
 
 - database passwords
-- query result rows
-- local SQLite state (`~/.openquery/openquery.db`)
+- result rows
+- local SQLite store files
 - keychain secrets
 
 ## Guardrails before execution
 
-1. SQL parse and policy validation (AST-based)
-2. LIMIT enforcement and clamping
-3. statement classification (`read`, `write`, `dangerous`)
+1. AST parse + policy validation
+2. LIMIT injection/clamping
+3. statement classification
 4. EXPLAIN gating in safe mode
-5. POWER mode confirmation workflow for writes
+5. POWER write confirmation flow
 
-Note for Desktop `Demo (No Docker)`:
+## Secret handling
 
-- SQLite uses `EXPLAIN QUERY PLAN` and simplified risk heuristics.
-- Postgres demo/custom profiles use full Postgres EXPLAIN gating.
+- Desktop secrets use OS keychain.
+- CLI passwords are prompted or piped (`--password-stdin`).
+- OpenAI key can come from desktop keychain or `OPENAI_API_KEY` env fallback.
 
-## Local secret handling
+## Audit trail
 
-- CLI passwords are prompted at runtime and not stored in query history.
-- Desktop can store passwords in OS keychain.
-- Desktop OpenAI API key is stored in OS keychain when saved in Settings.
-- `OPENAI_API_KEY` environment variable is supported as fallback for CLI/power users.
-- Profile metadata is stored locally in SQLite.
+Local audit events include profile, schema, power, and write-operation lifecycle events.
 
-## Auditability
-
-Local audit events include:
-
-- profile and power mode changes
-- write previews and write execution outcomes
-- blocked write attempts
-
-## Threat model
-
-See `docs/threat-model.md` for detailed trust boundaries, attack paths, and mitigation mapping.
+See also:
+- `docs/THREAT_MODEL.md`
+- `docs/TROUBLESHOOTING.md`

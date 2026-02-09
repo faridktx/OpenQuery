@@ -1,142 +1,29 @@
 # Troubleshooting
 
-## Docker daemon is not running
+Canonical troubleshooting doc for packaging. Source-aligned with `docs/troubleshooting.md`.
 
-Symptom:
+## Common fixes
 
-- `Cannot connect to the Docker daemon ... docker.sock`
+1. Docker unavailable
+- use No-Docker setup path in desktop.
+- or start Docker Desktop and rerun `pnpm smoke:docker`.
 
-Fix:
+2. Port conflict on Postgres fixture
+- run `pnpm smoke:docker`.
+- the script auto-selects a free port and writes `.openquery/fixture.env`.
 
-1. Start Docker Desktop.
-2. Re-run:
+3. Missing OpenAI key
+- set key in desktop Settings.
+- SQL mode remains usable without AI key.
 
-```bash
-docker info
-OPENQUERY_PG_PORT=55432 pnpm smoke:docker
-```
+4. Desktop build issues
+- ensure Xcode CLI tools + Rust toolchain are installed.
+- run `pnpm --filter @openquery/desktop tauri build --no-bundle`.
 
-Desktop fallback:
+5. Schema missing/stale
+- refresh schema from Setup or top bar before Ask.
 
-- Use `Setup` -> `Demo (No Docker)` to keep working without Docker.
-
-## Postgres fixture port conflict
-
-Symptom:
-
-- `address already in use` on `5432`
-
-Check who owns the port:
-
-```bash
-lsof -nP -iTCP:5432 -sTCP:LISTEN
-lsof -nP -iTCP:5433 -sTCP:LISTEN
-```
-
-Use a free host port:
-
-```bash
-OPENQUERY_PG_PORT=55432 pnpm smoke:docker
-OPENQUERY_PG_PORT=55432 OPENQUERY_PG_HOST=127.0.0.1 pnpm --filter @openquery/core test:integration
-```
-
-Desktop behavior:
-
-- `Setup` -> `Demo (Docker Postgres)` auto-picks a free port and stores it.
-
-## Seed data not updating
-
-Symptom:
-
-- fixture starts but expected seed changes are missing
-
-Cause:
-
-- `seed.sql` in `/docker-entrypoint-initdb.d` runs only when volume is initialized
-
-Fix:
-
-```bash
-docker compose -f infra/docker/docker-compose.yml down -v
-OPENQUERY_PG_PORT=55432 pnpm smoke:docker
-```
-
-## macOS `EPERM` / `uv_cwd` when repo is in `~/Documents`
-
-Fix options:
-
-1. Move repo to `~/dev/OpenQuery` (recommended), or
-2. Grant Full Disk Access to your terminal app and relaunch terminal
-
-## macOS `rsync --info=progress2` flag error
-
-Cause:
-
-- Apple `rsync` does not support GNU-only `--info=progress2`
-
-Use:
-
-```bash
-rsync -aP /path/from/OpenQuery/ ~/dev/OpenQuery/
-```
-
-Fallback:
-
-```bash
-cp -R /path/from/OpenQuery ~/dev/OpenQuery
-```
-
-## CLI helper argument forwarding confusion
-
-Use deterministic direct CLI commands:
-
-```bash
-pnpm -C apps/cli build
-node apps/cli/dist/main.js --help
-node apps/cli/dist/main.js doctor
-```
-
-Root helper remains available:
-
-```bash
-pnpm openquery:build -- doctor
-```
-
-## `OPENAI_API_KEY` missing
-
-Symptom:
-
-- Ask flow fails with key-not-set error
-
-Fix (desktop-first):
-
-1. Open `Settings` -> `AI Provider`.
-2. Paste key, click `Save`, then `Test key`.
-3. Return to Workspace; Ask buttons are enabled when key is valid.
-
-Fallback (terminal/env):
-
-```bash
-export OPENAI_API_KEY=sk-...
-```
-
-Desktop behavior:
-
-- Ask remains disabled with a clear CTA to Settings.
-- SQL mode still works without an OpenAI key.
-
-## Desktop build failures
-
-Prerequisites:
-
-```bash
-xcode-select --install
-rustup update
-```
-
-Compile checks:
-
-```bash
-pnpm --filter @openquery/desktop build
-pnpm --filter @openquery/desktop tauri build --no-bundle
-```
+6. Integration tests connect to wrong Postgres
+- run `pnpm smoke:docker` first, then `pnpm --filter @openquery/core test:integration`.
+- or run the combined command: `pnpm smoke:integration`.
+- integration tests auto-load `.openquery/fixture.env` and only fill missing env vars (CI-provided vars still win).

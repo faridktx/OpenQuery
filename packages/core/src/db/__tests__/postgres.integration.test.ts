@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pg from 'pg';
+import { loadFixtureEnvIfNeeded } from './fixture-env.js';
 import {
   executeQuery,
   explainQuery,
@@ -12,6 +13,7 @@ import {
 
 const RUN = process.env.OPENQUERY_PG_INTEGRATION === '1';
 const runDescribe = RUN ? describe : describe.skip;
+loadFixtureEnvIfNeeded();
 
 const cfg = {
   dbType: 'postgres',
