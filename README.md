@@ -151,5 +151,8 @@ pnpm --filter @openquery/desktop tauri build --no-bundle
 pnpm --filter @openquery/desktop build:bundle
 ```
 
+Current macOS bundle output is `.app` under `apps/desktop/src-tauri/target/release/bundle/macos/`.
+`.dmg` generation is not enabled in the current repository configuration.
+
 ## License
 MIT. See `LICENSE`.

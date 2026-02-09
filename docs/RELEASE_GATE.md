@@ -80,6 +80,10 @@ Pass criteria:
 - exits `0`
 - Tauri desktop compile succeeds
 
+Current macOS bundle output:
+- `.app` bundle is generated at `apps/desktop/src-tauri/target/release/bundle/macos/`.
+- `.dmg` is not produced by default in the current configuration.
+
 8. CLI build
 ```bash
 pnpm -C apps/cli build

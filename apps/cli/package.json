@@ -6,17 +6,13 @@
   "files": [
     "dist"
   ],
-  "bundleDependencies": [
-    "@openquery/core"
-  ],
   "bin": {
     "openquery": "dist/main.js",
     "oq": "dist/main.js"
   },
   "scripts": {
-    "build": "tsc",
-    "prepack": "pnpm run build && node scripts/prepack.mjs",
-    "postpack": "node scripts/postpack.mjs",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/main.js --sourcemap --external:better-sqlite3 --external:pg --external:openai --external:ajv --external:node-sql-parser --external:commander",
+    "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "dev": "node --loader ts-node/esm src/main.ts",
     "cli": "node dist/main.js",
@@ -26,7 +22,6 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@openquery/core": "workspace:*",
     "ajv": "^8.17.1",
     "better-sqlite3": "^11.0.0",
     "commander": "^12.0.0",
@@ -35,6 +30,8 @@
     "pg": "^8.13.0"
   },
   "devDependencies": {
+    "@openquery/core": "workspace:*",
+    "esbuild": "^0.25.0",
     "typescript": "^5.5.0"
   }
 }
