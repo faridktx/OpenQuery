@@ -14,7 +14,8 @@
   <p>
     <a href="docs/README.md">Docs</a> ·
     <a href="docs/recruiter-demo.md">2-Minute Demo</a> ·
-    <a href="docs/security.md">Security</a> ·
+    <a href="docs/PRODUCT_SPEC.md">Product Spec</a> ·
+    <a href="docs/SECURITY.md">Security</a> ·
     <a href="CONTRIBUTING.md">Contributing</a>
   </p>
 </div>
@@ -67,13 +68,20 @@ Then in the app:
 ### Option B: Docker Postgres demo
 ```bash
 docker info
-OPENQUERY_PG_PORT=55432 pnpm smoke:docker
+pnpm smoke:docker
 pnpm --filter @openquery/desktop dev:tauri
 ```
 
 Then in `Setup`, choose `Demo (Docker Postgres)` and click `Start`.
 
 Full recruiter flow: `docs/recruiter-demo.md`
+No-Docker deep-dive: `docs/DEMO_NODOCKER.md`
+Docker deep-dive: `docs/DEMO_DOCKER.md`
+
+Verified integration command:
+```bash
+pnpm smoke:integration
+```
 
 ## Quickstart (CLI)
 ```bash
@@ -83,6 +91,7 @@ node apps/cli/dist/main.js doctor
 ```
 
 Detailed CLI usage: `docs/cli.md`
+Enterprise CLI contract: `docs/CLI_CONTRACT.md`
 
 ## How It Works
 ![Architecture](assets/architecture/openquery-architecture.svg)
@@ -98,7 +107,7 @@ Detailed CLI usage: `docs/cli.md`
 - POWER mode requires explicit confirmation for writes.
 - Local-first boundary keeps credentials and result rows local.
 
-Details: `docs/security.md`, `docs/threat-model.md`
+Details: `docs/SECURITY.md`, `docs/THREAT_MODEL.md`
 
 ## Repository Structure
 ```text
@@ -134,6 +143,12 @@ pnpm -r build
 pnpm -r test
 pnpm lint
 pnpm typecheck
+```
+
+Packaging checks:
+```bash
+pnpm --filter @openquery/desktop tauri build --no-bundle
+pnpm --filter @openquery/desktop build:bundle
 ```
 
 ## License
